@@ -5,11 +5,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
 import org.eclipse.jface.viewers.ArrayContentProvider;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.jface.viewers.IStructuredSelection;
+import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.jface.viewers.TableViewer;
 import org.eclipse.jface.viewers.TableViewerColumn;
 import org.eclipse.swt.SWT;
@@ -38,8 +40,7 @@ public class SecurityMultiplierPage extends AbstractPage
     public SecurityMultiplierPage(Security security)
     {
         this.security = security;
-        security.getMultipliers().stream()
-                        .map(m -> new SecurityMultiplier(m.getDate(), m.getValue()))
+        security.getMultipliers().stream().map(m -> new SecurityMultiplier(m.getDate(), m.getValue()))
                         .forEach(multipliers::add);
         setTitle("Multipliers");
     }
@@ -51,7 +52,8 @@ public class SecurityMultiplierPage extends AbstractPage
         GridLayoutFactory.fillDefaults().numColumns(1).margins(10, 10).spacing(8, 8).applyTo(container);
 
         Label explanation = new Label(container, SWT.WRAP);
-        explanation.setText("A multiplier is effective from its date until the next entry. Before the first entry, the multiplier is 1.0.");
+        explanation.setText("A multiplier is effective from its date until the next entry. "
+                        + "Before the first entry, the multiplier is 1.0.");
         GridDataFactory.fillDefaults().grab(true, false).applyTo(explanation);
 
         viewer = new TableViewer(container, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
@@ -137,8 +139,12 @@ public class SecurityMultiplierPage extends AbstractPage
             @Override
             public void widgetSelected(SelectionEvent e)
             {
-                multipliers.clear();
-                viewer.refresh();
+                if (multipliers.isEmpty() || MessageDialog.openConfirm(getShell(), "Clear multipliers",
+                                "Remove all multiplier entries?"))
+                {
+                    multipliers.clear();
+                    viewer.refresh();
+                }
             }
         });
 
@@ -165,13 +171,13 @@ public class SecurityMultiplierPage extends AbstractPage
         }
         catch (NumberFormatException e)
         {
-            multiplierValue.setFocus();
+            showInvalidMultiplier();
             return;
         }
 
         if (!Double.isFinite(value) || value <= 0)
         {
-            multiplierValue.setFocus();
+            showInvalidMultiplier();
             return;
         }
 
@@ -185,7 +191,14 @@ public class SecurityMultiplierPage extends AbstractPage
             multipliers.add(~index, replacement);
 
         viewer.refresh();
-        viewer.setSelection(new org.eclipse.jface.viewers.StructuredSelection(replacement), true);
+        viewer.setSelection(new StructuredSelection(replacement), true);
+    }
+
+    private void showInvalidMultiplier()
+    {
+        MessageDialog.openError(getShell(), "Invalid multiplier", "Enter a positive numeric multiplier.");
+        multiplierValue.setFocus();
+        multiplierValue.selectAll();
     }
 
     private void deleteSelected()
