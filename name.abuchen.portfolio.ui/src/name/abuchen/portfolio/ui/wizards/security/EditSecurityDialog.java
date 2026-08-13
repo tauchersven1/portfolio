@@ -57,6 +57,8 @@ public class EditSecurityDialog extends Dialog
     private final EditSecurityCache cache;
     private final BindingHelper bindings;
 
+    private SecurityMultiplierPage multiplierPage;
+
     private boolean showQuoteConfigurationInitially = false;
 
     @Inject
@@ -207,12 +209,14 @@ public class EditSecurityDialog extends Dialog
         });
 
         addPage(new SecurityMasterDataPage(model, bindings), Images.SECURITY.image());
+        multiplierPage = new SecurityMultiplierPage(model.getSecurity());
+        addPage(multiplierPage, null);
         addPage(new AttributesPage(model, bindings), null);
         addPage(new SecurityTaxonomyPage(model, bindings), null);
         addPage(new HistoricalQuoteProviderPage(model, cache, bindings), null);
         addPage(new LatestQuoteProviderPage(model, cache, bindings), null);
 
-        tabFolder.setSelection(showQuoteConfigurationInitially ? 3 : 0);
+        tabFolder.setSelection(showQuoteConfigurationInitially ? 4 : 0);
 
         // selection event not fired for initial selection
         ((AbstractPage) tabFolder.getSelection().getData()).beforePage();
@@ -254,6 +258,7 @@ public class EditSecurityDialog extends Dialog
         boolean quotesCanChange = feedChanged || onlineIdChanged || tickerChanged || feedURLChanged || currencyChanged;
 
         model.applyChanges();
+        multiplierPage.applyChanges();
 
         if (quotesCanChange)
             security.getEphemeralData().touchFeedConfigurationChanged();
