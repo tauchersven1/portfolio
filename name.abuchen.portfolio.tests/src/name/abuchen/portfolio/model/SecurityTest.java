@@ -88,76 +88,171 @@ public class SecurityTest
         LatestSecurityPrice second = new LatestSecurityPrice(LocalDate.now(), 2);
         assertThat(security.setLatest(latest), is(true));
         assertThat(security.setLatest(second), is(true));
+
+        LatestSecurityPrice same = new LatestSecurityPrice(LocalDate.now(), 2);
+        assertThat(security.setLatest(same), is(false));
     }
 
     @Test
-    public void testPrices()
+    public void testAddPrice()
     {
         Security security = new Security();
+        LatestSecurityPrice one = new LatestSecurityPrice(LocalDate.parse("2020-02-28"), 100);
 
-        assertThat(security.addPrice(new SecurityPrice(LocalDate.of(2015, 1, 1), 100)), is(true));
-        assertThat(security.addPrice(new SecurityPrice(LocalDate.of(2015, 1, 2), 102)), is(true));
-        assertThat(security.addPrice(new SecurityPrice(LocalDate.of(2015, 1, 2), 102)), is(false));
-        assertThat(security.addPrice(new SecurityPrice(LocalDate.of(2015, 1, 2), 104)), is(true));
-        assertThat(security.addPrice(new SecurityPrice(LocalDate.of(2014, 12, 31), 99)), is(true));
+        assertThat(security.addPrice(one), is(true));
+        assertThat(security.getPrices().size(), is(1));
 
-        assertThat(security.getPrices().size(), is(3));
-        assertThat(security.getPrices().get(0).getValue(), is(99L));
-        assertThat(security.getPrices().get(1).getValue(), is(100L));
-        assertThat(security.getPrices().get(2).getValue(), is(104L));
+        LatestSecurityPrice two = new LatestSecurityPrice(LocalDate.parse("2020-02-29"), 100);
+
+        assertThat(security.addPrice(two), is(true));
+        assertThat(security.getPrices().size(), is(2));
+
+        LatestSecurityPrice same = new LatestSecurityPrice(LocalDate.parse("2020-02-29"), 100);
+        assertThat(security.addPrice(same), is(false));
+
+        assertThat(security.getPrices().size(), is(2));
+
+        LatestSecurityPrice sameButDifferentPrice = new LatestSecurityPrice(LocalDate.parse("2020-02-29"), 101);
+
+        assertThat(security.addPrice(sameButDifferentPrice), is(true));
+        assertThat(security.getPrices().size(), is(2));
     }
 
     @Test
-    public void testAddAllPrices()
+    public void testGetPricesIncludingLatest()
     {
         Security security = new Security();
 
-        assertThat(security.addPrice(new SecurityPrice(LocalDate.of(2015, 1, 1), 100)), is(true));
-        assertThat(security.addPrice(new SecurityPrice(LocalDate.of(2015, 1, 2), 102)), is(true));
+        // create historical price
+        LatestSecurityPrice historical = new LatestSecurityPrice(LocalDate.parse("2019-02-28"), 100);
+        security.addPrice(historical);
+        List<SecurityPrice> prices = security.getPricesIncludingLatest();
 
-        List<SecurityPrice> newPrices = List.of(new SecurityPrice(LocalDate.of(2015, 1, 1), 101),
-                        new SecurityPrice(LocalDate.of(2015, 1, 2), 103),
-                        new SecurityPrice(LocalDate.of(2015, 1, 3), 104));
+        assertThat(prices.size(), is(1));
+        assertThat(prices.contains(historical), is(true));
 
-        assertThat(security.addAllPrices(newPrices), is(true));
-        assertThat(security.getPrices().size(), is(3));
-        assertThat(security.getPrices().get(0).getValue(), is(100L));
-        assertThat(security.getPrices().get(1).getValue(), is(103L));
-        assertThat(security.getPrices().get(2).getValue(), is(104L));
+        // create latest price same as historical
+        LatestSecurityPrice latest = new LatestSecurityPrice(LocalDate.parse("2019-02-28"), 150);
+        security.setLatest(latest);
+        List<SecurityPrice> prices2 = security.getPricesIncludingLatest();
+
+        assertThat(prices2.size(), is(1));
+        assertThat(prices2.contains(historical), is(true));
+        assertThat(prices2.contains(latest), is(false));
+
+        // create latest with different date
+        LatestSecurityPrice latest2 = new LatestSecurityPrice(LocalDate.parse("2020-02-28"), 150);
+        security.setLatest(latest2);
+
+        List<SecurityPrice> prices3 = security.getPricesIncludingLatest();
+
+        assertThat(prices3.size(), is(2));
+        assertThat(prices2.contains(historical), is(true));
+        assertThat(prices3.contains(latest2), is(true));
+
     }
 
-    @Test
-    public void testGetSecurityPrice()
+    @Test(expected = NullPointerException.class)
+    public void testThatNullSecurityPriceIsNotAllowed()
     {
         Security security = new Security();
-
-        security.addPrice(new SecurityPrice(LocalDate.of(2015, 1, 1), 100));
-        security.addPrice(new SecurityPrice(LocalDate.of(2015, 1, 3), 103));
-        security.addPrice(new SecurityPrice(LocalDate.of(2015, 1, 5), 105));
-
-        assertThat(security.getSecurityPrice(LocalDate.of(2014, 12, 31)).getValue(), is(100L));
-        assertThat(security.getSecurityPrice(LocalDate.of(2015, 1, 1)).getValue(), is(100L));
-        assertThat(security.getSecurityPrice(LocalDate.of(2015, 1, 2)).getValue(), is(100L));
-        assertThat(security.getSecurityPrice(LocalDate.of(2015, 1, 3)).getValue(), is(103L));
-        assertThat(security.getSecurityPrice(LocalDate.of(2015, 1, 4)).getValue(), is(103L));
-        assertThat(security.getSecurityPrice(LocalDate.of(2015, 1, 5)).getValue(), is(105L));
-        assertThat(security.getSecurityPrice(LocalDate.of(2015, 1, 6)).getValue(), is(105L));
+        security.addPrice(null);
     }
 
     @Test
     public void testLatestTwoSecurityPrices()
     {
         Security security = new Security();
-        assertThat(security.getLatestTwoSecurityPrices(), is(Optional.empty()));
 
-        LocalDate today = LocalDate.now();
-        security.addPrice(new SecurityPrice(today.minusDays(2), 100));
-        security.addPrice(new SecurityPrice(today.minusDays(1), 102));
-        security.addPrice(new SecurityPrice(today, 104));
+        assertThat(security.getLatestTwoSecurityPrices().isPresent(), is(false));
 
-        Optional<Pair<SecurityPrice, SecurityPrice>> result = security.getLatestTwoSecurityPrices();
-        assertThat(result.isPresent(), is(true));
-        assertThat(result.get().getLeft().getValue(), is(104L));
-        assertThat(result.get().getRight().getValue(), is(102L));
+        SecurityPrice pYesterday = new SecurityPrice(LocalDate.now().plusDays(-2), 90);
+        SecurityPrice pToday = new LatestSecurityPrice(LocalDate.now(), 100);
+        SecurityPrice pTommorrow = new SecurityPrice(LocalDate.now().plusDays(1), 110);
+
+        // test that nothing is returned if only the latest security price
+        // exists
+        security.setLatest((LatestSecurityPrice) pToday);
+        assertThat(security.getLatestTwoSecurityPrices().isPresent(), is(false));
+
+        // test that future dates are ignored!
+        security.addPrice(pTommorrow);
+        assertThat(security.getLatestTwoSecurityPrices().isPresent(), is(false));
+
+        security.addPrice(pYesterday);
+
+        Optional<Pair<SecurityPrice, SecurityPrice>> latestTwo = security.getLatestTwoSecurityPrices();
+        assertThat(latestTwo.orElseThrow(IllegalArgumentException::new), is(new Pair<>(pToday, pYesterday)));
+
+        security.setLatest(null);
+        assertThat(security.getLatestTwoSecurityPrices().isPresent(), is(false));
+
+        security.addPrice(pToday);
+        latestTwo = security.getLatestTwoSecurityPrices();
+        assertThat(latestTwo.orElseThrow(IllegalArgumentException::new), is(new Pair<>(pToday, pYesterday)));
+
+    }
+
+    @Test
+    public void testExternalIdentifier()
+    {
+        Security security = new Security();
+
+        security.setName("Apple ORD");
+        assertThat(security.getExternalIdentifier(), is("Apple ORD"));
+
+        security.setWkn("865985");
+        assertThat(security.getExternalIdentifier(), is("865985"));
+
+        security.setTickerSymbol("AAPL");
+        assertThat(security.getExternalIdentifier(), is("AAPL"));
+
+        // In some countries there is no ISIN or WKN, only the ticker symbol.
+        // If historical prices are retrieved from the stock exchange,
+        // the ticker symbol is expanded. (UMAX --> UMAX.AX)
+        security.setTickerSymbol("AAPL.BA");
+        assertThat(security.getExternalIdentifier(), is("AAPL"));
+
+        security.setIsin("US0378331005");
+        assertThat(security.getExternalIdentifier(), is("US0378331005"));
+    }
+
+    @Test
+    public void testgetLatestNPricesOfDate()
+    {
+        Security security = new Security();
+        security.addPrice(new SecurityPrice(LocalDate.parse("2019-02-21"), 1));
+        security.addPrice(new SecurityPrice(LocalDate.parse("2019-02-22"), 2));
+        security.addPrice(new SecurityPrice(LocalDate.parse("2019-02-23"), 3));
+        security.addPrice(new SecurityPrice(LocalDate.parse("2019-02-24"), 4));
+
+        List<SecurityPrice> prices = security.getLatestNPricesOfDate(LocalDate.parse("2019-02-23"), 2);
+        assertThat(prices.size(), is(2));
+        assertThat(prices.get(0).getValue(), is(2l));
+        assertThat(prices.get(1).getValue(), is(3l));
+
+        prices = security.getLatestNPricesOfDate(LocalDate.parse("2019-02-21"), 2);
+        assertThat(prices.size(), is(1));
+        assertThat(prices.get(0).getValue(), is(1l));
+
+        // test with start date before date of first available price
+        prices = security.getLatestNPricesOfDate(LocalDate.parse("2018-05-05"), 2);
+        assertThat(prices.size(), is(0));
+
+        // test request portion of prices and start date after date of last
+        // price
+        prices = security.getLatestNPricesOfDate(LocalDate.parse("2020-02-02"), 2);
+        assertThat(prices.size(), is(2));
+        assertThat(prices.get(0).getValue(), is(3l));
+        assertThat(prices.get(1).getValue(), is(4l));
+
+        // test request more prices than available and start date after date of
+        // last price
+        prices = security.getLatestNPricesOfDate(LocalDate.parse("2020-02-02"), 40);
+        assertThat(prices.size(), is(4));
+        assertThat(prices.get(0).getValue(), is(1l));
+        assertThat(prices.get(1).getValue(), is(2l));
+        assertThat(prices.get(2).getValue(), is(3l));
+        assertThat(prices.get(3).getValue(), is(4l));
     }
 }
