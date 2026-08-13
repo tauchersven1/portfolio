@@ -3,7 +3,9 @@ package name.abuchen.portfolio.ui.wizards.security;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.layout.GridDataFactory;
@@ -26,7 +28,9 @@ import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
 
+import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityDelta;
 import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.Values;
@@ -36,6 +40,7 @@ public class SecurityMultiplierPage extends AbstractPage
 {
     private static final String TYPE = "type";
     private static final String UNDERLYING = "underlying";
+    private static final String UNDERLYING_SECURITY_UUID = "underlyingSecurityUUID";
     private static final String EXPIRATION_DATE = "expirationDate";
     private static final String LAST_TRADING_DAY = "lastTradingDay";
     private static final String SETTLEMENT_TYPE = "settlementType";
@@ -53,15 +58,19 @@ public class SecurityMultiplierPage extends AbstractPage
     private static final String FIRST_NOTICE_DAY = "firstNoticeDay";
     private static final String FINAL_SETTLEMENT_DATE = "finalSettlementDate";
 
-    private static final String[] DERIVATIVE_PROPERTIES = { TYPE, UNDERLYING, EXPIRATION_DATE, LAST_TRADING_DAY,
-                    SETTLEMENT_TYPE, SETTLEMENT_DATE, EXCHANGE, CONTRACT_SYMBOL, CONTRACT_SIZE, TICK_SIZE, PUT_CALL,
-                    STRIKE, EXERCISE_STYLE, CONTRACT_MONTH, FIRST_NOTICE_DAY, FINAL_SETTLEMENT_DATE };
+    private static final String[] DERIVATIVE_PROPERTIES = { TYPE, UNDERLYING, UNDERLYING_SECURITY_UUID, EXPIRATION_DATE,
+                    LAST_TRADING_DAY, SETTLEMENT_TYPE, SETTLEMENT_DATE, EXCHANGE, CONTRACT_SYMBOL, CONTRACT_SIZE,
+                    TICK_SIZE, PUT_CALL, STRIKE, EXERCISE_STYLE, CONTRACT_MONTH, FIRST_NOTICE_DAY,
+                    FINAL_SETTLEMENT_DATE };
 
+    private final Client client;
     private final Security security;
     private final List<SecurityMultiplier> multipliers = new ArrayList<>();
+    private final List<SecurityDelta> deltas = new ArrayList<>();
+    private final Map<String, Security> underlyingSecurities = new LinkedHashMap<>();
 
     private Combo derivativeType;
-    private Text underlying;
+    private Combo underlying;
     private Combo settlementType;
     private Text exchange;
     private Text contractSymbol;
@@ -87,11 +96,17 @@ public class SecurityMultiplierPage extends AbstractPage
     private DateTime effectiveDate;
     private Text multiplierValue;
 
-    public SecurityMultiplierPage(Security security)
+    private TableViewer deltaViewer;
+    private DateTime deltaEffectiveDate;
+    private Text deltaValue;
+
+    public SecurityMultiplierPage(Client client, Security security)
     {
+        this.client = client;
         this.security = security;
         security.getMultipliers().stream().map(m -> new SecurityMultiplier(m.getDate(), m.getValue()))
                         .forEach(multipliers::add);
+        deltas.addAll(SecurityDelta.getDeltas(security));
         setTitle("Derivatives");
     }
 
@@ -103,6 +118,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         createDerivativeMasterData(container);
         createMultiplierSection(container);
+        createDeltaSection(container);
 
         loadDerivativeData();
         updateDerivativeControls();
@@ -135,8 +151,14 @@ public class SecurityMultiplierPage extends AbstractPage
         GridDataFactory.fillDefaults().grab(true, false).applyTo(commonFields);
 
         new Label(commonFields, SWT.NONE).setText("Underlying");
-        underlying = new Text(commonFields, SWT.BORDER);
-        underlying.setMessage("Security name, ticker or UUID");
+        underlying = new Combo(commonFields, SWT.DROP_DOWN);
+        underlying.setToolTipText("Select another security or enter a free-text underlying");
+        client.getSecurities().stream().filter(s -> s != security).sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName()))
+                        .forEach(s -> {
+                            String label = underlyingLabel(s);
+                            underlyingSecurities.put(label, s);
+                            underlying.add(label);
+                        });
         GridDataFactory.fillDefaults().grab(true, false).applyTo(underlying);
 
         new Label(commonFields, SWT.NONE).setText("Exchange");
@@ -176,7 +198,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         new Label(optionGroup, SWT.NONE).setText("Strike");
         strike = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
-        GridDataFactory.fillDefaults().grab(true, false).applyTo(strike);
+        GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(strike);
 
         new Label(optionGroup, SWT.NONE).setText("Exercise style");
         exerciseStyle = new Combo(optionGroup, SWT.READ_ONLY);
@@ -204,15 +226,14 @@ public class SecurityMultiplierPage extends AbstractPage
         GridDataFactory.fillDefaults().grab(true, true).applyTo(multiplierGroup);
 
         Label explanation = new Label(multiplierGroup, SWT.WRAP);
-        explanation.setText("A multiplier is effective from its date until the next entry. "
-                        + "Before the first entry, the multiplier is 1.0.");
+        explanation.setText("A multiplier is effective from its date until the next entry. Before the first entry, the multiplier is 1.0.");
         GridDataFactory.fillDefaults().grab(true, false).applyTo(explanation);
 
         viewer = new TableViewer(multiplierGroup, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         viewer.getTable().setHeaderVisible(true);
         viewer.getTable().setLinesVisible(true);
         viewer.setContentProvider(ArrayContentProvider.getInstance());
-        GridDataFactory.fillDefaults().grab(true, true).hint(SWT.DEFAULT, 150).applyTo(viewer.getControl());
+        GridDataFactory.fillDefaults().grab(true, true).hint(SWT.DEFAULT, 120).applyTo(viewer.getControl());
 
         TableViewerColumn dateColumn = new TableViewerColumn(viewer, SWT.NONE);
         dateColumn.getColumn().setText("Valid from");
@@ -239,7 +260,7 @@ public class SecurityMultiplierPage extends AbstractPage
         });
 
         viewer.setInput(multipliers);
-        viewer.addSelectionChangedListener(event -> loadSelection());
+        viewer.addSelectionChangedListener(event -> loadMultiplierSelection());
 
         Composite editor = new Composite(multiplierGroup, SWT.NONE);
         GridLayoutFactory.fillDefaults().numColumns(5).spacing(8, 0).applyTo(editor);
@@ -247,7 +268,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         new Label(editor, SWT.NONE).setText("Valid from");
         effectiveDate = new DateTime(editor, SWT.DATE | SWT.DROP_DOWN);
-        setDate(LocalDate.now());
+        setMultiplierDate(LocalDate.now());
 
         new Label(editor, SWT.NONE).setText("Multiplier");
         multiplierValue = new Text(editor, SWT.BORDER | SWT.RIGHT);
@@ -267,7 +288,6 @@ public class SecurityMultiplierPage extends AbstractPage
 
         Composite actions = new Composite(multiplierGroup, SWT.NONE);
         GridLayoutFactory.fillDefaults().numColumns(2).spacing(8, 0).applyTo(actions);
-        GridDataFactory.fillDefaults().grab(true, false).applyTo(actions);
 
         Button delete = new Button(actions, SWT.PUSH);
         delete.setText("Delete selected");
@@ -276,7 +296,12 @@ public class SecurityMultiplierPage extends AbstractPage
             @Override
             public void widgetSelected(SelectionEvent e)
             {
-                deleteSelected();
+                IStructuredSelection selection = viewer.getStructuredSelection();
+                if (!selection.isEmpty())
+                {
+                    multipliers.remove(selection.getFirstElement());
+                    viewer.refresh();
+                }
             }
         });
 
@@ -287,11 +312,112 @@ public class SecurityMultiplierPage extends AbstractPage
             @Override
             public void widgetSelected(SelectionEvent e)
             {
-                if (multipliers.isEmpty() || MessageDialog.openConfirm(getShell(), "Clear multipliers",
-                                "Remove all multiplier entries?"))
+                if (multipliers.isEmpty() || MessageDialog.openConfirm(getShell(), "Clear multipliers", "Remove all multiplier entries?"))
                 {
                     multipliers.clear();
                     viewer.refresh();
+                }
+            }
+        });
+    }
+
+    private void createDeltaSection(Composite container)
+    {
+        Group deltaGroup = new Group(container, SWT.NONE);
+        deltaGroup.setText("Delta history");
+        GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).spacing(8, 8).applyTo(deltaGroup);
+        GridDataFactory.fillDefaults().grab(true, true).applyTo(deltaGroup);
+
+        Label explanation = new Label(deltaGroup, SWT.WRAP);
+        explanation.setText("Delta is effective from its date until the next entry. Before the first entry, Delta is 1.0. Standard option deltas must be between -1.0 and 1.0.");
+        GridDataFactory.fillDefaults().grab(true, false).applyTo(explanation);
+
+        deltaViewer = new TableViewer(deltaGroup, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
+        deltaViewer.getTable().setHeaderVisible(true);
+        deltaViewer.getTable().setLinesVisible(true);
+        deltaViewer.setContentProvider(ArrayContentProvider.getInstance());
+        GridDataFactory.fillDefaults().grab(true, true).hint(SWT.DEFAULT, 120).applyTo(deltaViewer.getControl());
+
+        TableViewerColumn dateColumn = new TableViewerColumn(deltaViewer, SWT.NONE);
+        dateColumn.getColumn().setText("Valid from");
+        dateColumn.getColumn().setWidth(180);
+        dateColumn.setLabelProvider(new ColumnLabelProvider()
+        {
+            @Override
+            public String getText(Object element)
+            {
+                return Values.Date.format(((SecurityDelta) element).getDate());
+            }
+        });
+
+        TableViewerColumn valueColumn = new TableViewerColumn(deltaViewer, SWT.RIGHT);
+        valueColumn.getColumn().setText("Delta");
+        valueColumn.getColumn().setWidth(180);
+        valueColumn.setLabelProvider(new ColumnLabelProvider()
+        {
+            @Override
+            public String getText(Object element)
+            {
+                return Double.toString(((SecurityDelta) element).getDelta());
+            }
+        });
+
+        deltaViewer.setInput(deltas);
+        deltaViewer.addSelectionChangedListener(event -> loadDeltaSelection());
+
+        Composite editor = new Composite(deltaGroup, SWT.NONE);
+        GridLayoutFactory.fillDefaults().numColumns(5).spacing(8, 0).applyTo(editor);
+
+        new Label(editor, SWT.NONE).setText("Valid from");
+        deltaEffectiveDate = new DateTime(editor, SWT.DATE | SWT.DROP_DOWN);
+        setDeltaDate(LocalDate.now());
+
+        new Label(editor, SWT.NONE).setText("Delta");
+        deltaValue = new Text(editor, SWT.BORDER | SWT.RIGHT);
+        deltaValue.setText("1.0");
+        GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(deltaValue);
+
+        Button addOrReplace = new Button(editor, SWT.PUSH);
+        addOrReplace.setText("Add / replace");
+        addOrReplace.addSelectionListener(new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                addOrReplaceDelta();
+            }
+        });
+
+        Composite actions = new Composite(deltaGroup, SWT.NONE);
+        GridLayoutFactory.fillDefaults().numColumns(2).spacing(8, 0).applyTo(actions);
+
+        Button delete = new Button(actions, SWT.PUSH);
+        delete.setText("Delete selected");
+        delete.addSelectionListener(new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                IStructuredSelection selection = deltaViewer.getStructuredSelection();
+                if (!selection.isEmpty())
+                {
+                    deltas.remove(selection.getFirstElement());
+                    deltaViewer.refresh();
+                }
+            }
+        });
+
+        Button clear = new Button(actions, SWT.PUSH);
+        clear.setText("Clear all");
+        clear.addSelectionListener(new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                if (deltas.isEmpty() || MessageDialog.openConfirm(getShell(), "Clear deltas", "Remove all Delta entries?"))
+                {
+                    deltas.clear();
+                    deltaViewer.refresh();
                 }
             }
         });
@@ -304,7 +430,11 @@ public class SecurityMultiplierPage extends AbstractPage
         selectByValue(putCall, property(PUT_CALL), "CALL", "PUT");
         selectByValue(exerciseStyle, property(EXERCISE_STYLE), "EUROPEAN", "AMERICAN", "BERMUDAN");
 
-        underlying.setText(valueOrEmpty(property(UNDERLYING)));
+        String underlyingUUID = property(UNDERLYING_SECURITY_UUID);
+        Security linkedUnderlying = underlyingUUID == null ? null : client.getSecurities().stream()
+                        .filter(s -> underlyingUUID.equals(s.getUUID())).findFirst().orElse(null);
+        underlying.setText(linkedUnderlying != null ? underlyingLabel(linkedUnderlying) : valueOrEmpty(property(UNDERLYING)));
+
         exchange.setText(valueOrEmpty(property(EXCHANGE)));
         contractSymbol.setText(valueOrEmpty(property(CONTRACT_SYMBOL)));
         contractSize.setText(valueOrEmpty(property(CONTRACT_SIZE)));
@@ -336,15 +466,26 @@ public class SecurityMultiplierPage extends AbstractPage
         finalSettlementDate.updateEnabled(isFuture);
     }
 
-    private void loadSelection()
+    private void loadMultiplierSelection()
     {
         IStructuredSelection selection = viewer.getStructuredSelection();
         if (selection.isEmpty())
             return;
 
         SecurityMultiplier selected = (SecurityMultiplier) selection.getFirstElement();
-        setDate(selected.getDate());
+        setMultiplierDate(selected.getDate());
         multiplierValue.setText(Double.toString(selected.getMultiplier()));
+    }
+
+    private void loadDeltaSelection()
+    {
+        IStructuredSelection selection = deltaViewer.getStructuredSelection();
+        if (selection.isEmpty())
+            return;
+
+        SecurityDelta selected = (SecurityDelta) selection.getFirstElement();
+        setDeltaDate(selected.getDate());
+        deltaValue.setText(Double.toString(selected.getDelta()));
     }
 
     private void addOrReplaceMultiplier()
@@ -366,9 +507,7 @@ public class SecurityMultiplierPage extends AbstractPage
             return;
         }
 
-        LocalDate date = getDate();
-        SecurityMultiplier replacement = SecurityMultiplier.of(date, value);
-
+        SecurityMultiplier replacement = SecurityMultiplier.of(getMultiplierDate(), value);
         int index = Collections.binarySearch(multipliers, replacement);
         if (index >= 0)
             multipliers.set(index, replacement);
@@ -379,6 +518,36 @@ public class SecurityMultiplierPage extends AbstractPage
         viewer.setSelection(new StructuredSelection(replacement), true);
     }
 
+    private void addOrReplaceDelta()
+    {
+        double value;
+        try
+        {
+            value = Double.parseDouble(deltaValue.getText().trim().replace(',', '.'));
+        }
+        catch (NumberFormatException e)
+        {
+            showInvalidDelta();
+            return;
+        }
+
+        if (!Double.isFinite(value) || value < -1.0 || value > 1.0)
+        {
+            showInvalidDelta();
+            return;
+        }
+
+        SecurityDelta replacement = SecurityDelta.of(getDeltaDate(), value);
+        int index = Collections.binarySearch(deltas, replacement);
+        if (index >= 0)
+            deltas.set(index, replacement);
+        else
+            deltas.add(~index, replacement);
+
+        deltaViewer.refresh();
+        deltaViewer.setSelection(new StructuredSelection(replacement), true);
+    }
+
     private void showInvalidMultiplier()
     {
         MessageDialog.openError(getShell(), "Invalid multiplier", "Enter a positive numeric multiplier.");
@@ -386,31 +555,40 @@ public class SecurityMultiplierPage extends AbstractPage
         multiplierValue.selectAll();
     }
 
-    private void deleteSelected()
+    private void showInvalidDelta()
     {
-        IStructuredSelection selection = viewer.getStructuredSelection();
-        if (selection.isEmpty())
-            return;
-
-        multipliers.remove(selection.getFirstElement());
-        viewer.refresh();
+        MessageDialog.openError(getShell(), "Invalid Delta", "Enter a numeric Delta between -1.0 and 1.0.");
+        deltaValue.setFocus();
+        deltaValue.selectAll();
     }
 
-    private LocalDate getDate()
+    private LocalDate getMultiplierDate()
     {
         return LocalDate.of(effectiveDate.getYear(), effectiveDate.getMonth() + 1, effectiveDate.getDay());
     }
 
-    private void setDate(LocalDate date)
+    private void setMultiplierDate(LocalDate date)
     {
         if (effectiveDate != null)
             effectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth());
+    }
+
+    private LocalDate getDeltaDate()
+    {
+        return LocalDate.of(deltaEffectiveDate.getYear(), deltaEffectiveDate.getMonth() + 1, deltaEffectiveDate.getDay());
+    }
+
+    private void setDeltaDate(LocalDate date)
+    {
+        if (deltaEffectiveDate != null)
+            deltaEffectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth());
     }
 
     public void applyChanges()
     {
         security.removeAllMultipliers();
         multipliers.forEach(m -> security.addMultiplier(new SecurityMultiplier(m.getDate(), m.getValue())));
+        SecurityDelta.replaceAll(security, deltas);
 
         int typeIndex = derivativeType.getSelectionIndex();
         if (typeIndex <= 0)
@@ -421,7 +599,12 @@ public class SecurityMultiplierPage extends AbstractPage
         }
 
         setProperty(TYPE, typeIndex == 1 ? "FUTURE" : "OPTION");
-        setProperty(UNDERLYING, text(underlying));
+
+        String underlyingText = comboText(underlying);
+        Security selectedUnderlying = underlyingSecurities.get(underlyingText);
+        setProperty(UNDERLYING, underlyingText);
+        setProperty(UNDERLYING_SECURITY_UUID, selectedUnderlying == null ? null : selectedUnderlying.getUUID());
+
         setProperty(EXPIRATION_DATE, expirationDate.getValue());
         setProperty(LAST_TRADING_DAY, lastTradingDay.getValue());
         setProperty(SETTLEMENT_DATE, settlementDate.getValue());
@@ -466,6 +649,18 @@ public class SecurityMultiplierPage extends AbstractPage
     {
         String value = control.getText().trim();
         return value.isEmpty() ? null : value;
+    }
+
+    private static String comboText(Combo control)
+    {
+        String value = control.getText().trim();
+        return value.isEmpty() ? null : value;
+    }
+
+    private static String underlyingLabel(Security security)
+    {
+        String ticker = security.getTickerSymbol();
+        return ticker == null || ticker.isBlank() ? security.getName() : security.getName() + " [" + ticker + "]";
     }
 
     private static String valueOrEmpty(String value)
