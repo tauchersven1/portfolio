@@ -23,7 +23,12 @@ public class SecurityProperty
         /**
          * Properties related to loading data from a quote feed.
          */
-        FEED;
+        FEED,
+
+        /**
+         * Contract master data for derivatives such as futures and options.
+         */
+        DERIVATIVE;
     }
 
     private final Type type;
