@@ -93,6 +93,6 @@ public class ReadingHistoricClientFilesTest
 
     private String normalizeOptionalEmptyElements(String xml)
     {
-        return xml.replace("<multipliers/>", "");
+        return xml.replace("\n      <multipliers/>", "");
     }
 }
