@@ -31,6 +31,7 @@ import name.abuchen.portfolio.ui.util.DropDown;
 import name.abuchen.portfolio.ui.util.SimpleAction;
 import name.abuchen.portfolio.ui.util.TableViewerCSVExporter;
 import name.abuchen.portfolio.ui.util.TimeMachineDropDown;
+import name.abuchen.portfolio.ui.views.columns.ExposureColumn;
 import name.abuchen.portfolio.ui.views.panes.ChartPane;
 import name.abuchen.portfolio.ui.views.panes.HistoricalPricesDataQualityPane;
 import name.abuchen.portfolio.ui.views.panes.HistoricalPricesPane;
@@ -46,6 +47,9 @@ public class StatementOfAssetsView extends AbstractFinanceView
     private PropertyChangeListener currencyChangeListener;
     private ClientFilterDropDown clientFilter;
     private TimeMachineDropDown timeMachineDropDown;
+
+    private LocalDate currentSnapshotDate = LocalDate.now();
+    private CurrencyConverter currentConverter;
 
     @Inject
     private ExchangeRateProviderFactory factory;
@@ -67,8 +71,9 @@ public class StatementOfAssetsView extends AbstractFinanceView
         setToContext(UIConstants.Context.FILTERED_CLIENT, filteredClient);
 
         var snapshotDate = timeMachineDropDown.getTimeMachineDate();
-        CurrencyConverter converter = new CurrencyConverterImpl(factory, getClient().getBaseCurrency());
-        assetViewer.setInput(clientFilter.getSelectedFilter(), snapshotDate.orElse(LocalDate.now()), converter);
+        currentSnapshotDate = snapshotDate.orElse(LocalDate.now());
+        currentConverter = new CurrencyConverterImpl(factory, getClient().getBaseCurrency());
+        assetViewer.setInput(clientFilter.getSelectedFilter(), currentSnapshotDate, currentConverter);
         updateTitle(getDefaultTitle());
 
         if (selection != null)
@@ -101,7 +106,6 @@ public class StatementOfAssetsView extends AbstractFinanceView
 
             // then all available units
             List<Pair<String, List<CurrencyUnit>>> available = CurrencyUnit.getAvailableCurrencyUnitsGrouped();
-
             for (Pair<String, List<CurrencyUnit>> pair : available)
             {
                 MenuManager submenu = new MenuManager(pair.getLeft());
@@ -137,6 +141,12 @@ public class StatementOfAssetsView extends AbstractFinanceView
     {
         assetViewer = make(StatementOfAssetsViewer.class);
         Control control = assetViewer.createControl(parent, true);
+
+        ExposureColumn exposureColumn = new ExposureColumn(getClient(), () -> currentSnapshotDate,
+                        () -> currentConverter, () -> null);
+        exposureColumn.setVisible(true);
+        assetViewer.getColumnHelper().addColumn(exposureColumn);
+
         assetViewer.setToolBarManager(getViewToolBarManager());
 
         updateTitle(getDefaultTitle());
