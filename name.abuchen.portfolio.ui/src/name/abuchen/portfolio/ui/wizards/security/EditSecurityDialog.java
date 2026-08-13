@@ -209,7 +209,7 @@ public class EditSecurityDialog extends Dialog
         });
 
         addPage(new SecurityMasterDataPage(model, bindings), Images.SECURITY.image());
-        multiplierPage = new SecurityMultiplierPage(model.getSecurity());
+        multiplierPage = new SecurityMultiplierPage(model.getClient(), model.getSecurity());
         addPage(multiplierPage, null);
         addPage(new AttributesPage(model, bindings), null);
         addPage(new SecurityTaxonomyPage(model, bindings), null);
