@@ -2,6 +2,7 @@ package name.abuchen.portfolio.snapshot;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -104,6 +105,16 @@ public class SecurityPosition
         return Money.of(investment.getCurrencyCode(), marketValue);
     }
 
+    public Money calculateValue(LocalDate valuationDate)
+    {
+        Security security = getSecurity();
+        if (security == null)
+            return calculateValue();
+
+        return DerivativePositionCalculator.calculateMarketValue(security, shares, price, transactions, converter,
+                        valuationDate);
+    }
+
     public static SecurityPosition split(SecurityPosition position, int weight)
     {
         List<PortfolioTransaction> splitTransactions = new ArrayList<>(position.transactions.size());
@@ -125,7 +136,7 @@ public class SecurityPosition
 
             t2.setShares(BigDecimal.valueOf(t.getShares()) //
                             .multiply(bdWeight, Values.MC) //
-                            .divide(Classification.ONE_HUNDRED_PERCENT_BD, Values.MC)
+                            .divide(Classification.ONE_HUNDRED_PERCENT_BD, Values.MC) //
                             .setScale(0, RoundingMode.HALF_DOWN).longValue());
 
             t.getUnits().forEach(u -> t2.addUnit(u.split(weight / (double) Classification.ONE_HUNDRED_PERCENT)));
