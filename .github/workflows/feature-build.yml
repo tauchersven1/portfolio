@@ -34,10 +34,26 @@ jobs:
           maven-version: 3.9.16
 
       - name: Full build and tests
+        shell: bash
         run: |
+          set +e
           mvn verify \
             --batch-mode \
-            --file portfolio-app/pom.xml
+            --file portfolio-app/pom.xml \
+            2>&1 | tee maven-build.log
+          status=${PIPESTATUS[0]}
+          echo "### Maven failure summary" >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^\[ERROR\]|COMPILATION ERROR|Failed to execute goal|Tests run:|Failures:|Errors:' maven-build.log | tail -n 120 >> "$GITHUB_STEP_SUMMARY" || true
+          exit "$status"
+
+      - name: Upload Maven build log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: maven-build-log
+          path: maven-build.log
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Show packaged products
         if: success()
