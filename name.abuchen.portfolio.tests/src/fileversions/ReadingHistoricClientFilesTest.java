@@ -42,16 +42,16 @@ public class ReadingHistoricClientFilesTest
     public void compare() throws IOException
     {
         Client xmlClient = ClientFactory.load(find(file + ".xml"), null, new NullProgressMonitor());
-        String xml = ClientTestUtilities.toString(xmlClient);
+        String xml = normalizeOptionalEmptyElements(ClientTestUtilities.toString(xmlClient));
         assertThat(xmlClient.getFileVersionAfterRead(), is(versionOnDisk));
 
         Client binaryClient = ClientFactory.load(find(file + ".binary.portfolio"), null, new NullProgressMonitor());
-        String binary = ClientTestUtilities.toString(binaryClient);
+        String binary = normalizeOptionalEmptyElements(ClientTestUtilities.toString(binaryClient));
         assertThat(binaryClient.getFileVersionAfterRead(), is(versionOnDisk));
 
         Client binaryEncryptedClient = ClientFactory.load(find(file + ".binary+pwd.portfolio"), "123456".toCharArray(),
                         new NullProgressMonitor());
-        String binaryEncrypted = ClientTestUtilities.toString(binaryEncryptedClient);
+        String binaryEncrypted = normalizeOptionalEmptyElements(ClientTestUtilities.toString(binaryEncryptedClient));
         assertThat(binaryEncryptedClient.getFileVersionAfterRead(), is(versionOnDisk));
 
         String xmlEncrpyted = null;
@@ -61,7 +61,7 @@ public class ReadingHistoricClientFilesTest
             // supported anymore
             Client xmlEncrpytedClient = ClientFactory.load(find(file + ".xml+pwd.portfolio"), "123456".toCharArray(),
                             new NullProgressMonitor());
-            xmlEncrpyted = ClientTestUtilities.toString(xmlEncrpytedClient);
+            xmlEncrpyted = normalizeOptionalEmptyElements(ClientTestUtilities.toString(xmlEncrpytedClient));
             assertThat(xmlEncrpytedClient.getFileVersionAfterRead(), is(versionOnDisk));
         }
 
@@ -89,5 +89,10 @@ public class ReadingHistoricClientFilesTest
                             is(xml.substring(pos, Math.min(pos + 100, xml.length()))));
         }
 
+    }
+
+    private String normalizeOptionalEmptyElements(String xml)
+    {
+        return xml.replace("<multipliers/>", "");
     }
 }
