@@ -79,6 +79,7 @@ public final class Security implements Attributable, InvestmentVehicle
     private String feed;
     private String feedURL;
     private List<SecurityPrice> prices = new ArrayList<>();
+    private List<SecurityMultiplier> multipliers = new ArrayList<>();
 
     // latestFeed and latestFeedURL are used to update the latest (current)
     // quote. If null, the values from feed and feedURL are used instead.
@@ -142,15 +143,9 @@ public final class Security implements Attributable, InvestmentVehicle
 
     /* package */void generateUUID()
     {
-        // needed to assign UUIDs when loading older versions from XML
         uuid = UUID.randomUUID().toString();
     }
 
-    /**
-     * Generates a UUID only if no UUID exists. For not yet known reasons, some
-     * securities do miss the UUID. However, we do not want to make the
-     * #generateUUID function public.
-     */
     public void fixMissingUUID()
     {
         if (uuid == null)
@@ -210,24 +205,11 @@ public final class Security implements Attributable, InvestmentVehicle
         this.updatedAt = Instant.now();
     }
 
-    /**
-     * Gets the target currency for exchange rates (the currency of the exchange
-     * rate).
-     * 
-     * @return target currency for exchange rates, else null
-     */
     public String getTargetCurrencyCode()
     {
         return this.targetCurrencyCode;
     }
 
-    /**
-     * Sets the target currency for exchange rates (defines the currency of the
-     * exchange rate).
-     * 
-     * @param targetCurrencyCode
-     *            target currency for exchange rates, else null
-     */
     public void setTargetCurrencyCode(String targetCurrencyCode)
     {
         this.targetCurrencyCode = targetCurrencyCode;
@@ -269,14 +251,6 @@ public final class Security implements Attributable, InvestmentVehicle
         this.updatedAt = Instant.now();
     }
 
-    /**
-     * Returns the ticker symbol (if available) without the stock market
-     * extension.
-     * <p/>
-     * In some countries there is no ISIN or WKN, only the ticker symbol. If
-     * historical prices are retrieved from the stock exchange, the ticker
-     * symbol is expanded. (UMAX --> UMAX.AX)
-     */
     public String getTickerSymbolWithoutStockMarket()
     {
         if (tickerSymbol == null)
@@ -308,19 +282,11 @@ public final class Security implements Attributable, InvestmentVehicle
         this.updatedAt = Instant.now();
     }
 
-    /**
-     * Is this an exchange rate symbol?
-     * 
-     * @return true for exchange rates, else false
-     */
     public boolean isExchangeRate()
     {
         return this.targetCurrencyCode != null;
     }
 
-    /**
-     * Returns ISIN, Ticker or WKN - whatever is available.
-     */
     public String getExternalIdentifier()
     {
         if (isin != null && isin.length() > 0)
@@ -384,10 +350,82 @@ public final class Security implements Attributable, InvestmentVehicle
         return Collections.unmodifiableList(prices);
     }
 
-    /**
-     * Returns a list of historical security prices that includes the latest
-     * security price if no history price exists for that date
-     */
+    public List<SecurityMultiplier> getMultipliers()
+    {
+        if (multipliers == null)
+            multipliers = new ArrayList<>();
+        return Collections.unmodifiableList(multipliers);
+    }
+
+    public boolean addMultiplier(SecurityMultiplier multiplier)
+    {
+        Objects.requireNonNull(multiplier);
+
+        if (multipliers == null)
+            multipliers = new ArrayList<>();
+
+        int index = Collections.binarySearch(multipliers, multiplier);
+
+        if (index < 0)
+        {
+            multipliers.add(~index, multiplier);
+            return true;
+        }
+
+        SecurityMultiplier replaced = multipliers.get(index);
+        if (!replaced.equals(multiplier))
+        {
+            multipliers.set(index, multiplier);
+            return true;
+        }
+
+        return false;
+    }
+
+    public void removeMultiplier(SecurityMultiplier multiplier)
+    {
+        if (multipliers != null)
+            multipliers.remove(multiplier);
+    }
+
+    public void removeAllMultipliers()
+    {
+        if (multipliers != null)
+            multipliers.clear();
+    }
+
+    public SecurityMultiplier getSecurityMultiplier(LocalDate requestedDate)
+    {
+        Objects.requireNonNull(requestedDate);
+
+        if (multipliers == null || multipliers.isEmpty())
+            return SecurityMultiplier.of(requestedDate, 1.0);
+
+        SecurityMultiplier last = multipliers.get(multipliers.size() - 1);
+        if (!last.getDate().isAfter(requestedDate))
+            return last;
+
+        SecurityMultiplier p = new SecurityMultiplier(requestedDate, 0);
+        int index = Collections.binarySearch(multipliers, p);
+
+        if (index >= 0)
+            return multipliers.get(index);
+        else if (index == -1)
+            return SecurityMultiplier.of(requestedDate, 1.0);
+        else
+            return multipliers.get(-index - 2);
+    }
+
+    public double getMultiplier(LocalDate requestedDate)
+    {
+        return getSecurityMultiplier(requestedDate).getMultiplier();
+    }
+
+    /* protobuf only */ void protobufSetMultipliers(List<SecurityMultiplier> newMultipliers)
+    {
+        this.multipliers = newMultipliers;
+    }
+
     public List<SecurityPrice> getPricesIncludingLatest()
     {
         List<SecurityPrice> copy = new ArrayList<>(prices);
@@ -397,18 +435,13 @@ public final class Security implements Attributable, InvestmentVehicle
 
         int index = Collections.binarySearch(copy, new SecurityPrice(latest.getDate(), latest.getValue()));
 
-        if (index >= 0) // historic quote exists -> use it
+        if (index >= 0)
             return copy;
 
         copy.add(~index, latest);
         return copy;
     }
 
-    /**
-     * Returns a list of the last historical security prices with requested
-     * number of prices (or less if there are not enough prices) from requested
-     * Date.
-     */
     public List<SecurityPrice> getLatestNPricesOfDate(LocalDate dateOfLastPrice, int numberOfPrices)
     {
         List<SecurityPrice> allPrices = getPricesIncludingLatest();
@@ -417,39 +450,23 @@ public final class Security implements Attributable, InvestmentVehicle
                         new SecurityPrice.ByDate());
 
         if (index < 0)
-            index = -index - 2; // if price for requested date not found, use
-                                // price before start date
+            index = -index - 2;
 
         if (index >= allPrices.size())
-            index = allPrices.size() - 1; // requested date greater than last
-                                          // prize --> use last price
+            index = allPrices.size() - 1;
 
         int fromIndex = index - numberOfPrices + 1;
         if (fromIndex < 0)
-            fromIndex = 0; // always start with first element if fromIndex is
-                           // out of bounds
+            fromIndex = 0;
 
         return new ArrayList<>(allPrices.subList(fromIndex, index + 1));
     }
 
-    /**
-     * Adds security price to historical quotes.
-     * 
-     * @return true if the historical quote was updated.
-     */
     public boolean addPrice(SecurityPrice price)
     {
         return addPrice(price, true);
     }
 
-    /**
-     * Adds security price to historical quotes.
-     * 
-     * @param overwriteExisting
-     *            is used to decide on whether to keep or overwrite existing
-     *            prices
-     * @return true if the historical quote was updated.
-     */
     public boolean addPrice(SecurityPrice price, boolean overwriteExisting)
     {
         Objects.requireNonNull(price);
@@ -465,11 +482,8 @@ public final class Security implements Attributable, InvestmentVehicle
         {
             SecurityPrice replaced = prices.get(index);
 
-            // different prices are replaced only, if the source is manual, csv
-            // or html import, the value is 0.0
             if (!replaced.equals(price) && (overwriteExisting || replaced.getValue() == 0.0))
             {
-                // only replace if necessary -> UI might keep reference!
                 prices.set(index, price);
                 return true;
             }
@@ -480,12 +494,6 @@ public final class Security implements Attributable, InvestmentVehicle
         }
     }
 
-    /**
-     * Adds all prices to the list of prices unless a security price for that
-     * date already exists. However, the last historical date is overwritten as
-     * some quote provider include the latest security price in the list of
-     * historical prices.
-     */
     public boolean addAllPrices(List<SecurityPrice> newPrices)
     {
         if (newPrices.isEmpty())
@@ -510,11 +518,6 @@ public final class Security implements Attributable, InvestmentVehicle
         return isUpdated;
     }
 
-    /**
-     * Sets the prices of the security. Use only during protobuf deserialisation
-     * because a) the overwrite check is not needed and b) potential future
-     * prices should be included (see #3935).
-     */
     /* protobuf only */ void protobufSetPrices(List<SecurityPrice> newPrices)
     {
         this.prices = newPrices;
@@ -532,17 +535,7 @@ public final class Security implements Attributable, InvestmentVehicle
 
     public SecurityPrice getSecurityPrice(LocalDate requestedDate)
     {
-        // assumption: prefer historic quote over latest if there are more
-        // up-to-date historic quotes
-
         SecurityPrice lastHistoric = prices.isEmpty() ? null : prices.get(prices.size() - 1);
-
-        // use latest quote only
-        // * if one exists
-        // * and if either no historic quotes exist
-        // * or
-        // ** if the requested time is after the latest quote
-        // ** and the historic quotes are older than the latest quote
 
         if (latest != null //
                         && (lastHistoric == null //
@@ -554,7 +547,6 @@ public final class Security implements Attributable, InvestmentVehicle
         if (lastHistoric == null)
             return new SecurityPrice(requestedDate, 0);
 
-        // avoid binary search if last historic quote <= requested date
         if (!lastHistoric.getDate().isAfter(requestedDate))
             return lastHistoric;
 
@@ -563,19 +555,12 @@ public final class Security implements Attributable, InvestmentVehicle
 
         if (index >= 0)
             return prices.get(index);
-        else if (index == -1) // requested is date before first historic quote
+        else if (index == -1)
             return prices.get(0);
         else
             return prices.get(-index - 2);
     }
 
-    /**
-     * Returns the latest two security prices needed to display the previous
-     * close as well as to calculate the change on the previous close.
-     * 
-     * @return a pair of security prices with the <em>left</em> being today's
-     *         price and <em>right</em> being the previous close
-     */
     public Optional<Pair<SecurityPrice, SecurityPrice>> getLatestTwoSecurityPrices()
     {
         if (prices.isEmpty())
@@ -628,14 +613,8 @@ public final class Security implements Attributable, InvestmentVehicle
         return latest;
     }
 
-    /**
-     * Sets the latest security price.
-     * 
-     * @return true if the latest security price was updated.
-     */
     public boolean setLatest(LatestSecurityPrice latest)
     {
-        // only replace if necessary -> UI might keep reference!
         if (!Objects.equals(latest, this.latest))
         {
             this.latest = latest;
@@ -709,10 +688,6 @@ public final class Security implements Attributable, InvestmentVehicle
                         .map(SecurityProperty::getValue).findAny();
     }
 
-    /**
-     * Sets the property values. If the value is null, the property is removed
-     * if it exists. Returns <tt>true</tt> if the property was updated.
-     */
     public boolean setPropertyValue(SecurityProperty.Type type, String name, String value)
     {
         if (properties == null)
@@ -753,11 +728,6 @@ public final class Security implements Attributable, InvestmentVehicle
         this.properties.add(data);
     }
 
-    /**
-     * Removes the given property, if it is present. Returns <tt>true</tt> if
-     * the properties contained the specified property (or equivalently, if this
-     * list changed as a result of the call).
-     */
     public boolean removeProperty(SecurityProperty data)
     {
         if (properties == null)
@@ -765,9 +735,6 @@ public final class Security implements Attributable, InvestmentVehicle
         return this.properties.remove(data);
     }
 
-    /**
-     * Removes all of the SecurityProperties that satisfy the given predicate.
-     */
     public boolean removePropertyIf(Predicate<SecurityProperty> filter)
     {
         if (properties != null)
@@ -791,16 +758,10 @@ public final class Security implements Attributable, InvestmentVehicle
         this.updatedAt = Instant.now();
     }
 
-    /**
-     * Gets all URLs contained in the notes.
-     * 
-     * @return list of URLs
-     */
     public Stream<Bookmark> getCustomBookmarks(Client client)
     {
         List<Bookmark> bookmarks = new ArrayList<>();
 
-        // extract bookmarks from attributes
         var myAttributes = getAttributes();
         client.getSettings().getAttributeTypes() //
                         .filter(t -> t.getType() == Bookmark.class) //
@@ -808,15 +769,11 @@ public final class Security implements Attributable, InvestmentVehicle
                             var bookmark = (Bookmark) myAttributes.get(attributeType);
                             if (bookmark != null)
                             {
-                                // use attribute type name as label unless the
-                                // user provided a custom label
                                 bookmarks.add(new Bookmark(bookmark.getPattern().equals(bookmark.getLabel())
                                                 ? attributeType.getName()
                                                 : bookmark.getLabel(), bookmark.getPattern()));
                             }
                         });
-
-        // extract bookmarks from notes
 
         if (!Strings.isNullOrEmpty(note))
         {
@@ -917,9 +874,12 @@ public final class Security implements Attributable, InvestmentVehicle
         answer.feed = feed;
         answer.feedURL = feedURL;
 
-        // cannot use Stream#toList b/c it returns an unmodifiable list
         answer.prices = new ArrayList<>(
                         prices.stream().map(p -> new SecurityPrice(p.getDate(), p.getValue())).toList());
+
+        if (multipliers != null)
+            answer.multipliers = new ArrayList<>(multipliers.stream()
+                            .map(m -> new SecurityMultiplier(m.getDate(), m.getValue())).toList());
 
         answer.latestFeed = latestFeed;
         answer.latestFeedURL = latestFeedURL;
@@ -965,5 +925,4 @@ public final class Security implements Attributable, InvestmentVehicle
     {
         return s != null && s.length() > 0;
     }
-
 }
