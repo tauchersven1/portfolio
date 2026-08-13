@@ -3,9 +3,12 @@ package name.abuchen.portfolio.model;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.EnumSet;
 
 import org.junit.Rule;
@@ -17,6 +20,27 @@ public class ClientFactoryTest
 {
     @Rule
     public TemporaryFolder tempFolder = new TemporaryFolder();
+
+    @Test
+    public void testSecurityMultiplierXmlRoundtrip() throws IOException
+    {
+        Client client = new Client();
+        Security security = new Security();
+        security.setName("Future with multiplier");
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.of(2025, 1, 1), 1000.0));
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.of(2026, 1, 1), 1025.125));
+        client.addSecurity(security);
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        new ClientFactory.XmlSerialization(false).save(client, output);
+
+        Client loaded = ClientFactory.load(new ByteArrayInputStream(output.toByteArray()));
+        Security loadedSecurity = loaded.getSecurities().get(0);
+
+        assertEquals(2, loadedSecurity.getMultipliers().size());
+        assertEquals(1000.0, loadedSecurity.getMultiplier(LocalDate.of(2025, 6, 1)), 0.000001);
+        assertEquals(1025.125, loadedSecurity.getMultiplier(LocalDate.of(2026, 8, 1)), 0.000001);
+    }
 
     @Test
     public void testGetFlagsForZipFile() throws IOException
