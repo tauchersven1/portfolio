@@ -1,0 +1,138 @@
+package name.abuchen.portfolio.snapshot;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+import name.abuchen.portfolio.model.PortfolioTransaction;
+import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityPrice;
+import name.abuchen.portfolio.model.SecurityProperty;
+import name.abuchen.portfolio.money.CurrencyConverter;
+import name.abuchen.portfolio.money.Money;
+import name.abuchen.portfolio.money.Values;
+
+public final class DerivativePositionCalculator
+{
+    public static final String DERIVATIVE_TYPE = "type"; //$NON-NLS-1$
+    public static final String UNDERLYING_SECURITY_UUID = "underlyingSecurityUUID"; //$NON-NLS-1$
+    public static final String OPTION = "OPTION"; //$NON-NLS-1$
+    public static final String FUTURE = "FUTURE"; //$NON-NLS-1$
+
+    private DerivativePositionCalculator()
+    {
+    }
+
+    public static String getDerivativeType(Security security)
+    {
+        return security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, DERIVATIVE_TYPE).orElse(null);
+    }
+
+    public static boolean isOption(Security security)
+    {
+        return OPTION.equals(getDerivativeType(security));
+    }
+
+    public static boolean isFuture(Security security)
+    {
+        return FUTURE.equals(getDerivativeType(security));
+    }
+
+    public static Money calculateMarketValue(Security security, long shares, SecurityPrice price,
+                    List<PortfolioTransaction> transactions, CurrencyConverter converter, LocalDate valuationDate)
+    {
+        if (isOption(security))
+            return valueOf(shares, price.getValue(), security.getMultiplier(valuationDate), security.getCurrencyCode());
+
+        if (isFuture(security))
+            return calculateFutureUnrealizedProfit(security, price, transactions, converter, valuationDate);
+
+        return valueOf(shares, price.getValue(), 1.0, security.getCurrencyCode());
+    }
+
+    public static Money valueOf(long shares, long quoteValue, double multiplier, String currencyCode)
+    {
+        long value = BigDecimal.valueOf(shares)
+                        .movePointLeft(Values.Share.precision())
+                        .multiply(BigDecimal.valueOf(quoteValue), Values.MC)
+                        .multiply(BigDecimal.valueOf(multiplier), Values.MC)
+                        .movePointLeft(Values.Quote.precisionDeltaToMoney())
+                        .setScale(0, RoundingMode.HALF_UP).longValue();
+        return Money.of(currencyCode, value);
+    }
+
+    private static Money calculateFutureUnrealizedProfit(Security security, SecurityPrice currentPrice,
+                    List<PortfolioTransaction> transactions, CurrencyConverter converter, LocalDate valuationDate)
+    {
+        OpenPosition open = calculateOpenPosition(security, transactions, converter);
+        if (open.shares == 0)
+            return Money.of(security.getCurrencyCode(), 0);
+
+        BigDecimal priceDifference = BigDecimal.valueOf(currentPrice.getValue()).subtract(open.averagePrice);
+        long unrealized = BigDecimal.valueOf(open.shares)
+                        .movePointLeft(Values.Share.precision())
+                        .multiply(priceDifference, Values.MC)
+                        .multiply(BigDecimal.valueOf(security.getMultiplier(valuationDate)), Values.MC)
+                        .movePointLeft(Values.Quote.precisionDeltaToMoney())
+                        .setScale(0, RoundingMode.HALF_UP).longValue();
+
+        return Money.of(security.getCurrencyCode(), unrealized);
+    }
+
+    private static OpenPosition calculateOpenPosition(Security security, List<PortfolioTransaction> transactions,
+                    CurrencyConverter converter)
+    {
+        long openShares = 0;
+        BigDecimal averagePrice = BigDecimal.ZERO;
+        CurrencyConverter securityConverter = converter.with(security.getCurrencyCode());
+
+        List<PortfolioTransaction> sorted = new ArrayList<>(transactions);
+        sorted.sort(Comparator.comparing(PortfolioTransaction::getDateTime));
+
+        for (PortfolioTransaction transaction : sorted)
+        {
+            long transactionShares = signedShares(transaction);
+            if (transactionShares == 0)
+                continue;
+
+            BigDecimal transactionPrice = BigDecimal
+                            .valueOf(transaction.getGrossPricePerShare(securityConverter).getAmount());
+
+            if (openShares == 0 || Long.signum(openShares) == Long.signum(transactionShares))
+            {
+                long oldAbsolute = Math.abs(openShares);
+                long transactionAbsolute = Math.abs(transactionShares);
+                long newAbsolute = oldAbsolute + transactionAbsolute;
+
+                averagePrice = averagePrice.multiply(BigDecimal.valueOf(oldAbsolute), Values.MC)
+                                .add(transactionPrice.multiply(BigDecimal.valueOf(transactionAbsolute), Values.MC))
+                                .divide(BigDecimal.valueOf(newAbsolute), Values.MC);
+                openShares += transactionShares;
+            }
+            else
+            {
+                long oldShares = openShares;
+                openShares += transactionShares;
+
+                if (openShares == 0)
+                    averagePrice = BigDecimal.ZERO;
+                else if (Long.signum(openShares) != Long.signum(oldShares))
+                    averagePrice = transactionPrice;
+            }
+        }
+
+        return new OpenPosition(openShares, averagePrice);
+    }
+
+    private static long signedShares(PortfolioTransaction transaction)
+    {
+        return transaction.getType().isPurchase() ? transaction.getShares() : -transaction.getShares();
+    }
+
+    private record OpenPosition(long shares, BigDecimal averagePrice)
+    {
+    }
+}
