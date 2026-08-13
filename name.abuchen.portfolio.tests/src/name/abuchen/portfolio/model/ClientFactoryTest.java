@@ -43,6 +43,27 @@ public class ClientFactoryTest
     }
 
     @Test
+    public void testSecurityMultiplierProtobufRoundtrip() throws IOException
+    {
+        Client client = new Client();
+        Security security = new Security();
+        security.setName("Future with multiplier");
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.of(2025, 1, 1), 1000.0));
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.of(2026, 1, 1), 1025.125));
+        client.addSecurity(security);
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        new ProtobufWriter().save(client, output);
+
+        Client loaded = new ProtobufWriter().load(new ByteArrayInputStream(output.toByteArray()));
+        Security loadedSecurity = loaded.getSecurities().get(0);
+
+        assertEquals(2, loadedSecurity.getMultipliers().size());
+        assertEquals(1000.0, loadedSecurity.getMultiplier(LocalDate.of(2025, 6, 1)), 0.000001);
+        assertEquals(1025.125, loadedSecurity.getMultiplier(LocalDate.of(2026, 8, 1)), 0.000001);
+    }
+
+    @Test
     public void testGetFlagsForZipFile() throws IOException
     {
         var zipFile = tempFolder.newFile("test.zip");
