@@ -3,7 +3,6 @@ package name.abuchen.portfolio.ui.wizards.security;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 import org.eclipse.jface.dialogs.MessageDialog;
@@ -27,7 +26,6 @@ import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
 
-import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.SecurityProperty;
@@ -60,11 +58,10 @@ public class SecurityMultiplierPage extends AbstractPage
                     STRIKE, EXERCISE_STYLE, CONTRACT_MONTH, FIRST_NOTICE_DAY, FINAL_SETTLEMENT_DATE };
 
     private final Security security;
-    private final List<Security> underlyings;
     private final List<SecurityMultiplier> multipliers = new ArrayList<>();
 
     private Combo derivativeType;
-    private Combo underlying;
+    private Text underlying;
     private Combo settlementType;
     private Text exchange;
     private Text contractSymbol;
@@ -90,14 +87,9 @@ public class SecurityMultiplierPage extends AbstractPage
     private DateTime effectiveDate;
     private Text multiplierValue;
 
-    public SecurityMultiplierPage(Client client, Security security)
+    public SecurityMultiplierPage(Security security)
     {
         this.security = security;
-        this.underlyings = client.getSecurities().stream().filter(s -> s != security)
-                        .sorted(Comparator.comparing(Security::getName,
-                                        Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
-                        .toList();
-
         security.getMultipliers().stream().map(m -> new SecurityMultiplier(m.getDate(), m.getValue()))
                         .forEach(multipliers::add);
         setTitle("Derivatives");
@@ -143,10 +135,8 @@ public class SecurityMultiplierPage extends AbstractPage
         GridDataFactory.fillDefaults().grab(true, false).applyTo(commonFields);
 
         new Label(commonFields, SWT.NONE).setText("Underlying");
-        underlying = new Combo(commonFields, SWT.READ_ONLY);
-        underlying.add("(none)");
-        underlyings.forEach(s -> underlying.add(s.getName()));
-        underlying.select(0);
+        underlying = new Text(commonFields, SWT.BORDER);
+        underlying.setMessage("Security name, ticker or UUID");
         GridDataFactory.fillDefaults().grab(true, false).applyTo(underlying);
 
         new Label(commonFields, SWT.NONE).setText("Exchange");
@@ -314,19 +304,7 @@ public class SecurityMultiplierPage extends AbstractPage
         selectByValue(putCall, property(PUT_CALL), "CALL", "PUT");
         selectByValue(exerciseStyle, property(EXERCISE_STYLE), "EUROPEAN", "AMERICAN", "BERMUDAN");
 
-        String underlyingUUID = property(UNDERLYING);
-        if (underlyingUUID != null)
-        {
-            for (int ii = 0; ii < underlyings.size(); ii++)
-            {
-                if (underlyingUUID.equals(underlyings.get(ii).getUUID()))
-                {
-                    underlying.select(ii + 1);
-                    break;
-                }
-            }
-        }
-
+        underlying.setText(valueOrEmpty(property(UNDERLYING)));
         exchange.setText(valueOrEmpty(property(EXCHANGE)));
         contractSymbol.setText(valueOrEmpty(property(CONTRACT_SYMBOL)));
         contractSize.setText(valueOrEmpty(property(CONTRACT_SIZE)));
@@ -443,9 +421,7 @@ public class SecurityMultiplierPage extends AbstractPage
         }
 
         setProperty(TYPE, typeIndex == 1 ? "FUTURE" : "OPTION");
-        setProperty(UNDERLYING, underlying.getSelectionIndex() > 0
-                        ? underlyings.get(underlying.getSelectionIndex() - 1).getUUID()
-                        : null);
+        setProperty(UNDERLYING, text(underlying));
         setProperty(EXPIRATION_DATE, expirationDate.getValue());
         setProperty(LAST_TRADING_DAY, lastTradingDay.getValue());
         setProperty(SETTLEMENT_DATE, settlementDate.getValue());
