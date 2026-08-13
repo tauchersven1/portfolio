@@ -56,7 +56,9 @@ public class SecurityMultiplierPersistenceTest
     private Client createClient()
     {
         Client client = new Client();
-        Security security = new Security("Test Future", "EUR");
+        Security security = new Security();
+        security.setName("Test Future");
+        security.setCurrencyCode("EUR");
         security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), 1000.0));
         security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-07-01"), 1125.25));
         client.addSecurity(security);
