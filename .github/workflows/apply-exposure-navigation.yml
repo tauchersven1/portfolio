@@ -1,0 +1,34 @@
+name: Apply exposure management navigation
+
+on:
+  push:
+    branches:
+      - agent/derivatives-tab
+    paths:
+      - .github/workflows/apply-exposure-navigation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/derivatives-tab
+          fetch-depth: 0
+
+      - name: Apply navigation change
+        run: python3 .github/scripts/apply_exposure_navigation.py
+
+      - name: Commit navigation and remove temporary files
+        run: |
+          git config user.name "OpenAI"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/apply-exposure-navigation.yml
+          git rm .github/scripts/apply_exposure_navigation.py
+          git add name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/editor/Navigation.java
+          git diff --cached --check
+          git commit -m "Add Exposuremanagement report navigation"
+          git push origin HEAD:agent/derivatives-tab
