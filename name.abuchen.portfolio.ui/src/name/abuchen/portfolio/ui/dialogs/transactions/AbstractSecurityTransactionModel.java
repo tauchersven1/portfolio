@@ -29,23 +29,22 @@ import name.abuchen.portfolio.ui.Messages;
 
 public abstract class AbstractSecurityTransactionModel extends AbstractModel
 {
-
     public enum Properties
     {
-        portfolio, security, account, date, time, shares, quote, grossValue, exchangeRate, inverseExchangeRate, //
-        convertedGrossValue, forexFees, fees, forexTaxes, taxes, total, note, exchangeRateCurrencies, //
-        inverseExchangeRateCurrencies, transactionCurrency, transactionCurrencyCode, securityCurrencyCode, //
-        calculationStatus;
+        portfolio, security, account, date, time, shares, multiplier, quote, grossValue, exchangeRate,
+        inverseExchangeRate, convertedGrossValue, forexFees, fees, forexTaxes, taxes, total, note,
+        exchangeRateCurrencies, inverseExchangeRateCurrencies, transactionCurrency, transactionCurrencyCode,
+        securityCurrencyCode, calculationStatus;
     }
 
     protected final Client client;
     protected PortfolioTransaction.Type type;
-
     protected Portfolio portfolio;
     protected Security security;
     protected LocalDate date = LocalDate.now();
     protected LocalTime time = PresetValues.getTime();
     protected long shares;
+    protected BigDecimal multiplier = BigDecimal.ONE;
     protected BigDecimal quote = BigDecimal.ONE;
     protected long grossValue;
     protected BigDecimal exchangeRate = BigDecimal.ONE;
@@ -71,18 +70,8 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     }
 
     public abstract boolean accepts(Type type);
-
-    /**
-     * Sets the source transaction that is being edited.
-     */
     public abstract void setSource(Object source);
-
-    /**
-     * Presets the values from the given source object, but creates a new
-     * transaction.
-     */
     public abstract void presetFromSource(Object source);
-
     public abstract boolean hasSource();
 
     @Override
@@ -98,21 +87,19 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
         setForexTaxes(0);
         setNote(null);
         setTime(PresetValues.getTime());
+        updateMultiplier();
     }
 
     protected void fillFromTransaction(PortfolioTransaction transaction)
     {
         this.security = transaction.getSecurity();
-
         LocalDateTime transactionDate = transaction.getDateTime();
         this.date = transactionDate.toLocalDate();
         this.time = transactionDate.toLocalTime();
-
+        this.multiplier = BigDecimal.valueOf(security != null ? security.getMultiplier(date) : 1.0);
         this.shares = transaction.getShares();
         this.total = transaction.getAmount();
         this.note = transaction.getNote();
-
-        // will be overwritten if forex data exists
         this.exchangeRate = BigDecimal.ONE;
 
         transaction.getUnits().forEach(unit -> {
@@ -121,8 +108,7 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
                 case GROSS_VALUE:
                     this.exchangeRate = unit.getExchangeRate();
                     this.grossValue = unit.getForex().getAmount();
-                    this.quote = BigDecimal.valueOf(
-                                    this.grossValue * Values.Share.factor() / (this.shares * Values.Amount.divider()));
+                    this.quote = calculateQuote(this.grossValue);
                     break;
                 case FEE:
                     if (unit.getForex() != null)
@@ -142,16 +128,12 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
         });
 
         this.convertedGrossValue = calculateConvertedGrossValue();
-
         if (exchangeRate.equals(BigDecimal.ONE))
         {
-            // units contained no information about forex
             this.grossValue = convertedGrossValue;
-            this.quote = transaction.getGrossPricePerShare().toBigDecimal();
+            this.quote = calculateQuote(this.grossValue);
         }
-
-        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
-                        this.calculationStatus = calculateStatus());
+        updateCalculationStatus();
     }
 
     protected void writeToTransaction(PortfolioTransaction transaction)
@@ -159,36 +141,27 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
         transaction.clearUnits();
 
         if (fees != 0)
-            transaction.addUnit(new Transaction.Unit(Transaction.Unit.Type.FEE, //
+            transaction.addUnit(new Transaction.Unit(Transaction.Unit.Type.FEE,
                             Money.of(getTransactionCurrencyCode(), fees)));
-
         if (taxes != 0)
-            transaction.addUnit(new Transaction.Unit(Transaction.Unit.Type.TAX, //
+            transaction.addUnit(new Transaction.Unit(Transaction.Unit.Type.TAX,
                             Money.of(getTransactionCurrencyCode(), taxes)));
 
         boolean hasForex = !getTransactionCurrencyCode().equals(getSecurityCurrencyCode());
         if (hasForex)
         {
             if (forexFees != 0)
-                transaction.addUnit(new Transaction.Unit(Transaction.Unit.Type.FEE, //
-                                Money.of(getTransactionCurrencyCode(),
-                                                Math.round(forexFees * exchangeRate.doubleValue())), //
-                                Money.of(getSecurityCurrencyCode(), forexFees), //
-                                exchangeRate));
-
+                transaction.addUnit(new Transaction.Unit(Transaction.Unit.Type.FEE,
+                                Money.of(getTransactionCurrencyCode(), Math.round(forexFees * exchangeRate.doubleValue())),
+                                Money.of(getSecurityCurrencyCode(), forexFees), exchangeRate));
             if (forexTaxes != 0)
-                transaction.addUnit(new Transaction.Unit(Transaction.Unit.Type.TAX, //
-                                Money.of(getTransactionCurrencyCode(),
-                                                Math.round(forexTaxes * exchangeRate.doubleValue())), //
-                                Money.of(getSecurityCurrencyCode(), forexTaxes), //
-                                exchangeRate));
-
-            transaction.addUnit(new Transaction.Unit(Transaction.Unit.Type.GROSS_VALUE, //
-                            Money.of(getTransactionCurrencyCode(), convertedGrossValue), //
-                            Money.of(getSecurityCurrencyCode(), grossValue), //
-                            exchangeRate));
+                transaction.addUnit(new Transaction.Unit(Transaction.Unit.Type.TAX,
+                                Money.of(getTransactionCurrencyCode(), Math.round(forexTaxes * exchangeRate.doubleValue())),
+                                Money.of(getSecurityCurrencyCode(), forexTaxes), exchangeRate));
+            transaction.addUnit(new Transaction.Unit(Transaction.Unit.Type.GROSS_VALUE,
+                            Money.of(getTransactionCurrencyCode(), convertedGrossValue),
+                            Money.of(getSecurityCurrencyCode(), grossValue), exchangeRate));
         }
-
     }
 
     @Override
@@ -197,47 +170,38 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
         return calculationStatus;
     }
 
-    /**
-     * Check whether calculation works out. The separate validation is needed
-     * because the model does prevent negative values in methods
-     * {@link #calcGrossValue(long, long, long)} and
-     * {@link #calcTotal(long, long, long)}. Due to the limited precision of the
-     * quote (2 digits currently) and the exchange rate (4 digits), the gross
-     * value and converted gross value are checked against a range.
-     */
+    private void updateCalculationStatus()
+    {
+        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
+                        this.calculationStatus = calculateStatus());
+    }
+
     private IStatus calculateStatus()
     {
         if (shares == 0L)
             return ValidationStatus.error(MessageFormat.format(Messages.MsgDialogInputRequired, Messages.ColumnShares));
-
+        if (multiplier == null || multiplier.signum() <= 0)
+            return ValidationStatus.error(MessageFormat.format(Messages.MsgDialogInputRequired, "Multiplier")); //$NON-NLS-1$
         if ((grossValue == 0L || convertedGrossValue == 0L) && type != PortfolioTransaction.Type.DELIVERY_OUTBOUND)
-            return ValidationStatus
-                            .error(MessageFormat.format(Messages.MsgDialogInputRequired, Messages.ColumnSubTotal));
+            return ValidationStatus.error(MessageFormat.format(Messages.MsgDialogInputRequired, Messages.ColumnSubTotal));
 
-        // check whether gross value is in range
-        long lower = Math.round(shares * quote.add(BigDecimal.valueOf(-0.01)).doubleValue() * Values.Amount.factor()
-                        / Values.Share.divider());
-        long upper = Math.round(shares * quote.add(BigDecimal.valueOf(0.01)).doubleValue() * Values.Amount.factor()
-                        / Values.Share.divider());
-        if (grossValue < lower || grossValue > upper)
+        long lower = calculateGrossValue(quote.add(BigDecimal.valueOf(-0.01)));
+        long upper = calculateGrossValue(quote.add(BigDecimal.valueOf(0.01)));
+        if (grossValue < Math.min(lower, upper) || grossValue > Math.max(lower, upper))
             return ValidationStatus.error(Messages.MsgIncorrectSubTotal);
 
-        // check whether converted gross value is in range
         upper = Math.round(grossValue * exchangeRate.add(BigDecimal.valueOf(0.0001)).doubleValue());
         lower = Math.round(grossValue * exchangeRate.add(BigDecimal.valueOf(-0.0001)).doubleValue());
         if (convertedGrossValue < lower || convertedGrossValue > upper)
             return ValidationStatus.error(Messages.MsgIncorrectConvertedSubTotal);
 
-        // check total
-        long t = calculateTotal();
-        if (t != total)
-            return ValidationStatus.error(MessageFormat.format(Messages.MsgIncorrectTotal, Values.Amount.format(t)));
-
+        long expectedTotal = calculateTotal();
+        if (expectedTotal != total)
+            return ValidationStatus.error(MessageFormat.format(Messages.MsgIncorrectTotal, Values.Amount.format(expectedTotal)));
         if (total == 0L && type == PortfolioTransaction.Type.SELL)
             return ValidationStatus.error(Messages.MsgHintUseOutboundDeliveryForZeroTotal);
         else if (total == 0L && type != PortfolioTransaction.Type.DELIVERY_OUTBOUND)
             return ValidationStatus.error(MessageFormat.format(Messages.MsgDialogInputRequired, Messages.ColumnTotal));
-
         return ValidationStatus.ok();
     }
 
@@ -249,7 +213,6 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     public void setPortfolio(Portfolio portfolio)
     {
         firePropertyChange(Properties.portfolio.name(), this.portfolio, this.portfolio = portfolio);
-
         if (security != null)
         {
             updateSharesAndQuote();
@@ -267,24 +230,24 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
         String oldCurrencyCode = getSecurityCurrencyCode();
         String oldExchangeRateCurrencies = getExchangeRateCurrencies();
         String oldInverseExchangeRateCurrencies = getInverseExchangeRateCurrencies();
-
         firePropertyChange(Properties.security.name(), this.security, this.security = security);
-
         firePropertyChange(Properties.securityCurrencyCode.name(), oldCurrencyCode, getSecurityCurrencyCode());
-        firePropertyChange(Properties.exchangeRateCurrencies.name(), oldExchangeRateCurrencies,
-                        getExchangeRateCurrencies());
+        firePropertyChange(Properties.exchangeRateCurrencies.name(), oldExchangeRateCurrencies, getExchangeRateCurrencies());
         firePropertyChange(Properties.inverseExchangeRateCurrencies.name(), oldInverseExchangeRateCurrencies,
                         getInverseExchangeRateCurrencies());
-
+        updateMultiplier();
         updateExchangeRate();
         updateSharesAndQuote();
     }
 
+    private void updateMultiplier()
+    {
+        setMultiplier(BigDecimal.valueOf(security != null ? security.getMultiplier(date) : 1.0));
+    }
+
     protected void updateSharesAndQuote()
     {
-        // do not auto-suggest shares and quote when editing an existing
-        // transaction
-        if (hasSource())
+        if (hasSource() || security == null)
             return;
 
         if (type == PortfolioTransaction.Type.SELL || type == PortfolioTransaction.Type.DELIVERY_OUTBOUND)
@@ -292,28 +255,16 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
             boolean hasPosition = false;
             if (portfolio != null)
             {
-                // since the security position has always the currency of the
-                // investment vehicle, actually no conversion is needed. Hence
-                // we can use an arbitrary converter.
-                CurrencyConverter converter = new CurrencyConverterImpl(getExchangeRateProviderFactory(),
-                                CurrencyUnit.EUR);
+                CurrencyConverter converter = new CurrencyConverterImpl(getExchangeRateProviderFactory(), CurrencyUnit.EUR);
                 PortfolioSnapshot snapshot = PortfolioSnapshot.create(portfolio, converter, date);
                 SecurityPosition position = snapshot.getPositionsBySecurity().get(security);
                 if (position != null)
                 {
                     setShares(position.getShares());
-
-                    // the position is in the currency of the instrument,
-                    // therefore trigger setting the gross value
-
-                    setQuote(BigDecimal.valueOf(position.getPrice().getValue())
-                                    .movePointLeft(Values.Quote.precision()));
-                    triggerGrossValue(position.calculateValue().getAmount());
-                    
+                    setQuote(BigDecimal.valueOf(position.getPrice().getValue()).movePointLeft(Values.Quote.precision()));
                     hasPosition = true;
                 }
             }
-
             if (!hasPosition)
             {
                 setShares(0);
@@ -333,17 +284,12 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
             setExchangeRate(BigDecimal.ONE);
             return;
         }
-
-        // do not auto-suggest exchange rate when editing an existing
-        // transaction
         if (hasSource())
             return;
-
         if (!getTransactionCurrencyCode().isEmpty() && !getSecurityCurrencyCode().isEmpty())
         {
-            ExchangeRateTimeSeries series = getExchangeRateProviderFactory() //
+            ExchangeRateTimeSeries series = getExchangeRateProviderFactory()
                             .getTimeSeries(getSecurityCurrencyCode(), getTransactionCurrencyCode());
-
             if (series != null)
                 setExchangeRate(series.lookupRate(date).orElse(new ExchangeRate(date, BigDecimal.ONE)).getValue());
             else
@@ -365,6 +311,7 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     public void setDate(LocalDate date)
     {
         firePropertyChange(Properties.date.name(), this.date, this.date = date);
+        updateMultiplier();
         updateSharesAndQuote();
         updateExchangeRate();
     }
@@ -384,19 +331,24 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     public void setShares(long shares)
     {
         firePropertyChange(Properties.shares.name(), this.shares, this.shares = shares);
-
         if (quote.doubleValue() != 0)
-        {
-            triggerGrossValue(
-                            Math.round(shares * quote.doubleValue() * Values.Amount.factor() / Values.Share.divider()));
-        }
+            triggerGrossValue(calculateGrossValue(quote));
         else if (grossValue != 0 && shares != 0)
-        {
-            setQuote(BigDecimal.valueOf(grossValue * Values.Share.factor() / (shares * Values.Amount.divider())));
-        }
+            setQuote(calculateQuote(grossValue));
+        updateCalculationStatus();
+    }
 
-        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
-                        this.calculationStatus = calculateStatus());
+    public BigDecimal getMultiplier()
+    {
+        return multiplier;
+    }
+
+    public void setMultiplier(BigDecimal multiplier)
+    {
+        BigDecimal newValue = multiplier == null ? BigDecimal.ZERO : multiplier;
+        firePropertyChange(Properties.multiplier.name(), this.multiplier, this.multiplier = newValue);
+        triggerGrossValue(calculateGrossValue(quote));
+        updateCalculationStatus();
     }
 
     public BigDecimal getQuote()
@@ -406,15 +358,10 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
 
     public void setQuote(BigDecimal quote)
     {
-        var newValue = quote == null ? BigDecimal.ZERO : quote;
-
-        firePropertyChange(Properties.quote.name(), this.quote, this.quote = newValue); // NOSONAR
-
-        triggerGrossValue(
-                        Math.round(shares * newValue.doubleValue() * Values.Amount.factor() / Values.Share.divider()));
-
-        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
-                        this.calculationStatus = calculateStatus()); // NOSONAR
+        BigDecimal newValue = quote == null ? BigDecimal.ZERO : quote;
+        firePropertyChange(Properties.quote.name(), this.quote, this.quote = newValue);
+        triggerGrossValue(calculateGrossValue(newValue));
+        updateCalculationStatus();
     }
 
     public long getGrossValue()
@@ -425,16 +372,23 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     public void setGrossValue(long grossValue)
     {
         triggerGrossValue(grossValue);
+        if (shares != 0 && multiplier.signum() != 0)
+            firePropertyChange(Properties.quote.name(), this.quote, this.quote = calculateQuote(grossValue));
+        updateCalculationStatus();
+    }
 
-        if (shares != 0)
-        {
-            BigDecimal newQuote = BigDecimal
-                            .valueOf(grossValue * Values.Share.factor() / (shares * Values.Amount.divider()));
-            firePropertyChange(Properties.quote.name(), this.quote, this.quote = newQuote);
-        }
+    private long calculateGrossValue(BigDecimal quoteValue)
+    {
+        return Math.round(shares * quoteValue.doubleValue() * multiplier.doubleValue() * Values.Amount.factor()
+                        / Values.Share.divider());
+    }
 
-        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
-                        this.calculationStatus = calculateStatus());
+    private BigDecimal calculateQuote(long value)
+    {
+        if (shares == 0 || multiplier == null || multiplier.signum() == 0)
+            return BigDecimal.ZERO;
+        return BigDecimal.valueOf(value * Values.Share.factor()
+                        / (shares * Values.Amount.divider() * multiplier.doubleValue()));
     }
 
     public void triggerGrossValue(long grossValue)
@@ -451,23 +405,17 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     public void setExchangeRate(BigDecimal exchangeRate)
     {
         BigDecimal newRate = exchangeRate == null ? BigDecimal.ZERO : exchangeRate;
-
         BigDecimal oldInverseRate = getInverseExchangeRate();
         firePropertyChange(Properties.exchangeRate.name(), this.exchangeRate, this.exchangeRate = newRate);
         firePropertyChange(Properties.inverseExchangeRate.name(), oldInverseRate, getInverseExchangeRate());
-
         triggerConvertedGrossValue(Math.round(newRate.doubleValue() * grossValue));
-
-        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
-                        this.calculationStatus = calculateStatus());
+        updateCalculationStatus();
     }
 
     public BigDecimal getInverseExchangeRate()
     {
-        if (exchangeRate.compareTo(BigDecimal.ZERO) == 0)
-            return BigDecimal.ZERO;
-        else
-            return BigDecimal.ONE.divide(exchangeRate, 10, RoundingMode.HALF_DOWN);
+        return exchangeRate.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO
+                        : BigDecimal.ONE.divide(exchangeRate, 10, RoundingMode.HALF_DOWN);
     }
 
     public void setInverseExchangeRate(BigDecimal rate)
@@ -486,7 +434,6 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     public void setConvertedGrossValue(long convertedGrossValue)
     {
         triggerConvertedGrossValue(convertedGrossValue);
-
         if (grossValue != 0)
         {
             BigDecimal newExchangeRate = BigDecimal.valueOf(convertedGrossValue).divide(BigDecimal.valueOf(grossValue),
@@ -494,12 +441,9 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
             BigDecimal oldInverseRate = getInverseExchangeRate();
             firePropertyChange(Properties.exchangeRate.name(), this.exchangeRate, this.exchangeRate = newExchangeRate);
             firePropertyChange(Properties.inverseExchangeRate.name(), oldInverseRate, getInverseExchangeRate());
-
-            triggerTotal(calculateTotal()); // forex fees and taxes might change
+            triggerTotal(calculateTotal());
         }
-
-        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
-                        this.calculationStatus = calculateStatus());
+        updateCalculationStatus();
     }
 
     public void triggerConvertedGrossValue(long convertedGrossValue)
@@ -518,9 +462,7 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     {
         firePropertyChange(Properties.fees.name(), this.fees, this.fees = fees);
         triggerTotal(calculateTotal());
-
-        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
-                        this.calculationStatus = calculateStatus());
+        updateCalculationStatus();
     }
 
     public long getForexFees()
@@ -532,9 +474,7 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     {
         firePropertyChange(Properties.forexFees.name(), this.forexFees, this.forexFees = forexFees);
         triggerTotal(calculateTotal());
-
-        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
-                        this.calculationStatus = calculateStatus());
+        updateCalculationStatus();
     }
 
     public long getTaxes()
@@ -546,9 +486,7 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     {
         firePropertyChange(Properties.taxes.name(), this.taxes, this.taxes = taxes);
         triggerTotal(calculateTotal());
-
-        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
-                        this.calculationStatus = calculateStatus());
+        updateCalculationStatus();
     }
 
     public long getForexTaxes()
@@ -560,9 +498,7 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     {
         firePropertyChange(Properties.forexTaxes.name(), this.forexTaxes, this.forexTaxes = forexTaxes);
         triggerTotal(calculateTotal());
-
-        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
-                        this.calculationStatus = calculateStatus());
+        updateCalculationStatus();
     }
 
     public long getTotal()
@@ -573,19 +509,13 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     public void setTotal(long total)
     {
         triggerTotal(total);
-
         firePropertyChange(Properties.convertedGrossValue.name(), this.convertedGrossValue,
                         this.convertedGrossValue = calculateConvertedGrossValue());
-
         firePropertyChange(Properties.grossValue.name(), this.grossValue,
                         this.grossValue = Math.round(convertedGrossValue / exchangeRate.doubleValue()));
-
-        if (shares != 0)
-            firePropertyChange(Properties.quote.name(), this.quote, this.quote = BigDecimal
-                            .valueOf(grossValue * Values.Share.factor() / (shares * Values.Amount.divider())));
-
-        firePropertyChange(Properties.calculationStatus.name(), this.calculationStatus,
-                        this.calculationStatus = calculateStatus());
+        if (shares != 0 && multiplier.signum() != 0)
+            firePropertyChange(Properties.quote.name(), this.quote, this.quote = calculateQuote(grossValue));
+        updateCalculationStatus();
     }
 
     public void triggerTotal(long total)
@@ -610,17 +540,11 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
 
     public abstract String getTransactionCurrencyCode();
 
-    /**
-     * Returns exchange rate label in direct (price) notation.
-     */
     public String getExchangeRateCurrencies()
     {
         return String.format("%s/%s", getSecurityCurrencyCode(), getTransactionCurrencyCode()); //$NON-NLS-1$
     }
 
-    /**
-     * Returns exchange rate label in indirect (quantity) notation.
-     */
     public String getInverseExchangeRateCurrencies()
     {
         return String.format("%s/%s", getTransactionCurrencyCode(), getSecurityCurrencyCode()); //$NON-NLS-1$
@@ -634,7 +558,6 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     protected long calculateConvertedGrossValue()
     {
         long feesAndTaxes = fees + taxes + Math.round(exchangeRate.doubleValue() * (forexFees + forexTaxes));
-
         switch (type)
         {
             case BUY:
@@ -651,7 +574,6 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     private long calculateTotal()
     {
         long feesAndTaxes = fees + taxes + Math.round(exchangeRate.doubleValue() * (forexFees + forexTaxes));
-
         switch (type)
         {
             case BUY:
