@@ -1,0 +1,84 @@
+package name.abuchen.portfolio.snapshot;
+
+import java.time.LocalDate;
+
+import name.abuchen.portfolio.model.Client;
+import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityDelta;
+import name.abuchen.portfolio.model.SecurityProperty;
+import name.abuchen.portfolio.money.CurrencyConverter;
+import name.abuchen.portfolio.money.Money;
+
+/**
+ * Shared calculation of economic exposure for reporting and statement-of-assets
+ * columns.
+ */
+public final class ExposureCalculator
+{
+    public enum ExposureType
+    {
+        MARKET_VALUE, NOTIONAL, DELTA_ADJUSTED
+    }
+
+    public static final String OPTION_PRODUCT_TYPE = "optionProductType"; //$NON-NLS-1$
+    public static final String KNOCK_OUT_CERTIFICATE = "KNOCK_OUT_CERTIFICATE"; //$NON-NLS-1$
+
+    private ExposureCalculator()
+    {
+    }
+
+    public static Money calculate(Client client, SecurityPosition position, LocalDate date,
+                    CurrencyConverter converter, ExposureType exposureType)
+    {
+        Security security = position.getSecurity();
+        if (security == null)
+            return null;
+
+        if (exposureType == ExposureType.MARKET_VALUE)
+            return converter.convert(date, position.calculateValue(date));
+
+        String derivativeType = DerivativePositionCalculator.getDerivativeType(security);
+        if (derivativeType == null)
+            return converter.convert(date, position.calculateValue(date));
+
+        long referenceValue;
+        String exposureCurrency;
+
+        if (DerivativePositionCalculator.FUTURE.equals(derivativeType) || isKnockoutCertificate(security))
+        {
+            Security underlying = DerivativePositionCalculator.resolveUnderlying(client, security);
+            if (underlying == null)
+                return null;
+
+            referenceValue = underlying.getSecurityPrice(date).getValue();
+            exposureCurrency = underlying.getCurrencyCode();
+        }
+        else if (DerivativePositionCalculator.OPTION.equals(derivativeType))
+        {
+            Long strikeValue = DerivativePositionCalculator.getOptionStrikeQuoteValue(security);
+            if (strikeValue == null)
+                return null;
+
+            referenceValue = strikeValue.longValue();
+            exposureCurrency = security.getCurrencyCode();
+        }
+        else
+        {
+            return converter.convert(date, position.calculateValue(date));
+        }
+
+        double factor = security.getMultiplier(date);
+        if (exposureType == ExposureType.DELTA_ADJUSTED)
+            factor *= SecurityDelta.getDelta(security, date);
+
+        Money rawExposure = DerivativePositionCalculator.valueOf(position.getShares(), referenceValue, factor,
+                        exposureCurrency);
+        return converter.convert(date, rawExposure);
+    }
+
+    public static boolean isKnockoutCertificate(Security security)
+    {
+        return KNOCK_OUT_CERTIFICATE.equals(security
+                        .getPropertyValue(SecurityProperty.Type.DERIVATIVE, OPTION_PRODUCT_TYPE).orElse(null));
+    }
+}
