@@ -3,7 +3,6 @@ package name.abuchen.portfolio.ui.views;
 import java.beans.PropertyChangeListener;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.StringJoiner;
 import java.util.function.Function;
 
 import jakarta.inject.Inject;
@@ -148,7 +147,7 @@ public class StatementOfAssetsView extends AbstractFinanceView
         exposureColumn.setVisible(true);
         assetViewer.getColumnHelper().addColumn(exposureColumn);
 
-        assetViewer.getColumnHelper().addColumn(createContractDataColumn());
+        addDerivativeContractColumns();
         assetViewer.getColumnHelper().addColumn(createPutCallColumn());
 
         assetViewer.setToolBarManager(getViewToolBarManager());
@@ -179,12 +178,38 @@ public class StatementOfAssetsView extends AbstractFinanceView
         return control;
     }
 
-    private Column createContractDataColumn()
+    private void addDerivativeContractColumns()
     {
-        Column column = new Column("derivativeContractData", "Contract Data", SWT.LEFT, 260); //$NON-NLS-1$ //$NON-NLS-2$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeUnderlying", "Underlying",
+                        "underlying", 140)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeContractSymbol",
+                        "Contract / Trading Symbol", "contractSymbol", 150)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeExchange", "Exchange",
+                        "exchange", 90)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeContractMonth",
+                        "Contract Month", "contractMonth", 100)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeFirstTradingDay",
+                        "First Trading Day", "firstTradingDay", 110)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeLastTradingDay",
+                        "Last Trading Day", "lastTradingDay", 110)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeExpirationDate",
+                        "Expiration Date", "expirationDate", 110)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeSettlementDate",
+                        "Settlement Date", "settlementDate", 110)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeFirstNoticeDay",
+                        "First Notice Day", "firstNoticeDay", 110)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeSettlementType",
+                        "Settlement", "settlementType", 90)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeContractSize",
+                        "Contract Size", "contractSize", 100)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeTickSize", "Tick Size",
+                        "tickSize", 90)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+    }
+
+    private Column createDerivativePropertyColumn(String id, String label, String propertyName, int width)
+    {
+        Column column = new Column(id, label, SWT.LEFT, width);
         column.setGroupLabel(DERIVATIVES_GROUP);
-        column.setDescription("Compact derivative contract master data: underlying, symbol, exchange, contract month, "
-                        + "trading/expiration/settlement dates, settlement type, contract size and tick size."); //$NON-NLS-1$
         column.setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -198,20 +223,15 @@ public class StatementOfAssetsView extends AbstractFinanceView
                 if (property(security, "type") == null) //$NON-NLS-1$
                     return null;
 
-                StringJoiner data = new StringJoiner("; "); //$NON-NLS-1$
-                add(data, "Underlying", property(security, "underlying")); //$NON-NLS-1$ //$NON-NLS-2$
-                add(data, "Symbol", property(security, "contractSymbol")); //$NON-NLS-1$ //$NON-NLS-2$
-                add(data, "Exchange", property(security, "exchange")); //$NON-NLS-1$ //$NON-NLS-2$
-                add(data, "Month", property(security, "contractMonth")); //$NON-NLS-1$ //$NON-NLS-2$
-                add(data, "First trading", property(security, "firstTradingDay")); //$NON-NLS-1$ //$NON-NLS-2$
-                add(data, "Expiration", property(security, "expirationDate")); //$NON-NLS-1$ //$NON-NLS-2$
-                add(data, "Last trading", property(security, "lastTradingDay")); //$NON-NLS-1$ //$NON-NLS-2$
-                add(data, "Settlement date", property(security, "settlementDate")); //$NON-NLS-1$ //$NON-NLS-2$
-                add(data, "First notice", property(security, "firstNoticeDay")); //$NON-NLS-1$ //$NON-NLS-2$
-                add(data, "Settlement", property(security, "settlementType")); //$NON-NLS-1$ //$NON-NLS-2$
-                add(data, "Size", property(security, "contractSize")); //$NON-NLS-1$ //$NON-NLS-2$
-                add(data, "Tick", property(security, "tickSize")); //$NON-NLS-1$ //$NON-NLS-2$
-                return data.length() == 0 ? null : data.toString();
+                String value = property(security, propertyName);
+                if ("settlementType".equals(propertyName)) //$NON-NLS-1$
+                {
+                    if ("CASH".equals(value)) //$NON-NLS-1$
+                        return "Cash"; //$NON-NLS-1$
+                    if ("PHYSICAL".equals(value)) //$NON-NLS-1$
+                        return "Physical"; //$NON-NLS-1$
+                }
+                return value;
             }
         });
         column.setVisible(false);
@@ -246,12 +266,6 @@ public class StatementOfAssetsView extends AbstractFinanceView
     private static String property(Security security, String name)
     {
         return security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, name).orElse(null);
-    }
-
-    private static void add(StringJoiner data, String label, String value)
-    {
-        if (value != null && !value.isBlank())
-            data.add(label + ": " + value); //$NON-NLS-1$
     }
 
     @Override

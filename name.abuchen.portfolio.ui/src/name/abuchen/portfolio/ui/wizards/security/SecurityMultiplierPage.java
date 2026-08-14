@@ -144,7 +144,7 @@ public class SecurityMultiplierPage extends AbstractPage
         masterDataTab.setControl(masterData);
 
         Composite riskParameters = new Composite(tabs, SWT.NONE);
-        GridLayoutFactory.fillDefaults().numColumns(3).margins(10, 10).spacing(10, 8).applyTo(riskParameters);
+        GridLayoutFactory.fillDefaults().numColumns(3).equalWidth(true).margins(10, 10).spacing(10, 8).applyTo(riskParameters);
         createMultiplierSection(riskParameters);
         createDeltaSection(riskParameters);
         createKnockoutLevelSection(riskParameters);
@@ -215,14 +215,14 @@ public class SecurityMultiplierPage extends AbstractPage
         tickSize = new Text(commonFields, SWT.BORDER | SWT.RIGHT);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(tickSize);
 
-        firstTradingDay = new OptionalDateField(commonFields, "First trading day");
+        firstTradingDay = new OptionalDateField(commonFields, "First Trading Day");
+        lastTradingDay = new OptionalDateField(commonFields, "Last Trading Day");
+
+        addEmptyHalf(commonFields);
         expirationDate = new OptionalDateField(commonFields, "Expiration Date");
 
         addEmptyHalf(commonFields);
-        lastTradingDay = new OptionalDateField(commonFields, "Last trading day");
-
-        addEmptyHalf(commonFields);
-        settlementDate = new OptionalDateField(commonFields, "Settlement date");
+        settlementDate = new OptionalDateField(commonFields, "Settlement Date");
 
         optionGroup = new Group(container, SWT.NONE);
         optionGroup.setText("Option");
@@ -325,7 +325,7 @@ public class SecurityMultiplierPage extends AbstractPage
         viewer.addSelectionChangedListener(event -> loadMultiplierSelection());
 
         Composite editor = new Composite(multiplierGroup, SWT.NONE);
-        GridLayoutFactory.fillDefaults().numColumns(5).spacing(8, 0).applyTo(editor);
+        GridLayoutFactory.fillDefaults().numColumns(4).spacing(8, 4).applyTo(editor);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(editor);
 
         new Label(editor, SWT.NONE).setText("Valid from");
@@ -339,6 +339,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         Button addOrReplace = new Button(editor, SWT.PUSH);
         addOrReplace.setText("Add / replace");
+        GridDataFactory.fillDefaults().span(4, 1).applyTo(addOrReplace);
         addOrReplace.addSelectionListener(new SelectionAdapter()
         {
             @Override
@@ -435,7 +436,7 @@ public class SecurityMultiplierPage extends AbstractPage
         deltaViewer.addSelectionChangedListener(event -> loadDeltaSelection());
 
         Composite editor = new Composite(deltaGroup, SWT.NONE);
-        GridLayoutFactory.fillDefaults().numColumns(5).spacing(8, 0).applyTo(editor);
+        GridLayoutFactory.fillDefaults().numColumns(4).spacing(8, 4).applyTo(editor);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(editor);
 
         new Label(editor, SWT.NONE).setText("Valid from");
@@ -449,6 +450,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         Button addOrReplace = new Button(editor, SWT.PUSH);
         addOrReplace.setText("Add / replace");
+        GridDataFactory.fillDefaults().span(4, 1).applyTo(addOrReplace);
         addOrReplace.addSelectionListener(new SelectionAdapter()
         {
             @Override
@@ -539,7 +541,7 @@ public class SecurityMultiplierPage extends AbstractPage
         knockoutLevelViewer.addSelectionChangedListener(event -> loadKnockoutLevelSelection());
 
         Composite editor = new Composite(knockoutLevelGroup, SWT.NONE);
-        GridLayoutFactory.fillDefaults().numColumns(5).spacing(8, 0).applyTo(editor);
+        GridLayoutFactory.fillDefaults().numColumns(4).spacing(8, 4).applyTo(editor);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(editor);
 
         new Label(editor, SWT.NONE).setText("Valid from");
@@ -552,6 +554,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         Button addOrReplace = new Button(editor, SWT.PUSH);
         addOrReplace.setText("Add / replace");
+        GridDataFactory.fillDefaults().span(4, 1).applyTo(addOrReplace);
         addOrReplace.addSelectionListener(new SelectionAdapter()
         {
             @Override
