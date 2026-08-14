@@ -61,6 +61,48 @@ public class DerivativePositionCalculatorTest
     }
 
     @Test
+    public void testSecurityPositionOptionMarketValueUsesMultiplier()
+    {
+        LocalDate date = LocalDate.of(2026, 8, 13);
+        Security option = new Security("Option", "EUR");
+        option.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "type", "OPTION");
+        option.addMultiplier(SecurityMultiplier.of(LocalDate.of(2026, 1, 1), 100.0));
+
+        PortfolioTransaction buy = new PortfolioTransaction(PortfolioTransaction.Type.BUY);
+        buy.setDateTime(LocalDateTime.of(2026, 8, 1, 12, 0));
+        buy.setSecurity(option);
+        buy.setCurrencyCode("EUR");
+        buy.setShares(Values.Share.factorize(2));
+        buy.setAmount(Values.Amount.factorize(8.0));
+
+        SecurityPosition position = new SecurityPosition(option, new TestCurrencyConverter(),
+                        new SecurityPrice(date, Values.Quote.factorize(4.0)), List.of(buy));
+
+        assertThat(position.calculateValue(), is(Money.of("EUR", Values.Amount.factorize(800.0))));
+    }
+
+    @Test
+    public void testSecurityPositionFutureMarketValueUsesUnrealizedProfit()
+    {
+        LocalDate date = LocalDate.of(2026, 8, 13);
+        Security future = new Security("Future", "EUR");
+        future.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "type", "FUTURE");
+        future.addMultiplier(SecurityMultiplier.of(LocalDate.of(2026, 1, 1), 50.0));
+
+        PortfolioTransaction buy = new PortfolioTransaction(PortfolioTransaction.Type.BUY);
+        buy.setDateTime(LocalDateTime.of(2026, 8, 1, 12, 0));
+        buy.setSecurity(future);
+        buy.setCurrencyCode("EUR");
+        buy.setShares(Values.Share.factorize(2));
+        buy.setAmount(Values.Amount.factorize(200.0));
+
+        SecurityPosition position = new SecurityPosition(future, new TestCurrencyConverter(),
+                        new SecurityPrice(date, Values.Quote.factorize(110.0)), List.of(buy));
+
+        assertThat(position.calculateValue(), is(Money.of("EUR", Values.Amount.factorize(1000.0))));
+    }
+
+    @Test
     public void testExistingSecurityConvertedToOptionResolvesUnderlyingByStoredNameWithoutUUID()
     {
         Client client = new Client();
