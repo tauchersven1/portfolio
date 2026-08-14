@@ -11,7 +11,6 @@ import org.eclipse.swt.graphics.Font;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityDelta;
-import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.Money;
 import name.abuchen.portfolio.money.MoneyCollectors;
@@ -25,8 +24,6 @@ import name.abuchen.portfolio.ui.views.StatementOfAssetsViewer.ElementComparator
 @SuppressWarnings("nls")
 public class ExposureColumn extends Column
 {
-    private static final String UNDERLYING_SECURITY_UUID = "underlyingSecurityUUID";
-
     private final Client client;
     private final Supplier<LocalDate> dateProvider;
     private final Supplier<CurrencyConverter> converterProvider;
@@ -93,13 +90,7 @@ public class ExposureColumn extends Column
 
         if (DerivativePositionCalculator.OPTION.equals(derivativeType))
         {
-            String uuid = security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, UNDERLYING_SECURITY_UUID)
-                            .orElse(null);
-            if (uuid == null)
-                return null;
-
-            Security underlying = client.getSecurities().stream().filter(s -> uuid.equals(s.getUUID())).findFirst()
-                            .orElse(null);
+            Security underlying = DerivativePositionCalculator.resolveUnderlying(client, security);
             if (underlying == null)
                 return null;
 
