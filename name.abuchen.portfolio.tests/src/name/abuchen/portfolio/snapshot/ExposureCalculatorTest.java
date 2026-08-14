@@ -70,7 +70,7 @@ public class ExposureCalculatorTest
     }
 
     @Test
-    public void testMarketValueUsesDerivativePositionValuation()
+    public void testOptionMarketValueUsesQuantityPriceAndMultiplier()
     {
         Client client = new Client();
         Security option = new Security("Option", "EUR");
@@ -83,6 +83,30 @@ public class ExposureCalculatorTest
                         ExposureType.MARKET_VALUE);
 
         assertThat(exposure, is(Money.of("EUR", Values.Amount.factorize(800.0))));
+    }
+
+    @Test
+    public void testFutureMarketValueUsesUnrealizedProfitAndNotNotionalValue()
+    {
+        Client client = new Client();
+        Security future = new Security("Future", "EUR");
+        future.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "type", "FUTURE");
+        future.addMultiplier(SecurityMultiplier.of(LocalDate.of(2026, 1, 1), 50.0));
+        client.addSecurity(future);
+
+        PortfolioTransaction buy = new PortfolioTransaction(PortfolioTransaction.Type.BUY);
+        buy.setDateTime(LocalDateTime.of(2026, 8, 1, 12, 0));
+        buy.setSecurity(future);
+        buy.setCurrencyCode("EUR");
+        buy.setShares(Values.Share.factorize(2));
+        buy.setAmount(Values.Amount.factorize(200.0));
+
+        SecurityPosition position = new SecurityPosition(future, new TestCurrencyConverter(),
+                        new SecurityPrice(DATE, Values.Quote.factorize(110.0)), List.of(buy));
+        Money marketValue = ExposureCalculator.calculate(client, position, DATE, new TestCurrencyConverter(),
+                        ExposureType.MARKET_VALUE);
+
+        assertThat(marketValue, is(Money.of("EUR", Values.Amount.factorize(1000.0))));
     }
 
     private SecurityPosition position(Security security, long quantity, double price)
