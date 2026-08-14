@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityPrice;
@@ -18,6 +19,7 @@ import name.abuchen.portfolio.money.Values;
 public final class DerivativePositionCalculator
 {
     public static final String DERIVATIVE_TYPE = "type"; //$NON-NLS-1$
+    public static final String UNDERLYING = "underlying"; //$NON-NLS-1$
     public static final String UNDERLYING_SECURITY_UUID = "underlyingSecurityUUID"; //$NON-NLS-1$
     public static final String OPTION = "OPTION"; //$NON-NLS-1$
     public static final String FUTURE = "FUTURE"; //$NON-NLS-1$
@@ -39,6 +41,47 @@ public final class DerivativePositionCalculator
     public static boolean isFuture(Security security)
     {
         return FUTURE.equals(getDerivativeType(security));
+    }
+
+    public static Security resolveUnderlying(Client client, Security derivative)
+    {
+        String uuid = derivative.getPropertyValue(SecurityProperty.Type.DERIVATIVE, UNDERLYING_SECURITY_UUID)
+                        .orElse(null);
+        if (uuid != null && !uuid.isBlank())
+        {
+            Security byUUID = client.getSecurities().stream().filter(s -> uuid.equals(s.getUUID())).findFirst()
+                            .orElse(null);
+            if (byUUID != null)
+                return byUUID;
+        }
+
+        String underlying = derivative.getPropertyValue(SecurityProperty.Type.DERIVATIVE, UNDERLYING).orElse(null);
+        if (underlying == null || underlying.isBlank())
+            return null;
+
+        String search = underlying.trim();
+        List<Security> matches = client.getSecurities().stream().filter(s -> s != derivative)
+                        .filter(s -> matchesUnderlying(s, search)).toList();
+        return matches.size() == 1 ? matches.get(0) : null;
+    }
+
+    private static boolean matchesUnderlying(Security security, String search)
+    {
+        if (security.getName() != null && security.getName().equalsIgnoreCase(search))
+            return true;
+
+        String ticker = security.getTickerSymbol();
+        if (ticker != null && ticker.equalsIgnoreCase(search))
+            return true;
+
+        if (ticker != null && security.getName() != null)
+        {
+            String label = security.getName() + " [" + ticker + "]"; //$NON-NLS-1$ //$NON-NLS-2$
+            if (label.equalsIgnoreCase(search))
+                return true;
+        }
+
+        return false;
     }
 
     public static Money calculateMarketValue(Security security, long shares, SecurityPrice price,
