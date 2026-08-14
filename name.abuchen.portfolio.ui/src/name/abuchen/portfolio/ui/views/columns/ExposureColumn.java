@@ -10,13 +10,12 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Font;
 
 import name.abuchen.portfolio.model.Client;
-import name.abuchen.portfolio.model.Security;
-import name.abuchen.portfolio.model.SecurityDelta;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.Money;
 import name.abuchen.portfolio.money.MoneyCollectors;
 import name.abuchen.portfolio.money.Values;
-import name.abuchen.portfolio.snapshot.DerivativePositionCalculator;
+import name.abuchen.portfolio.snapshot.ExposureCalculator;
+import name.abuchen.portfolio.snapshot.ExposureCalculator.ExposureType;
 import name.abuchen.portfolio.ui.util.AttributeComparator;
 import name.abuchen.portfolio.ui.util.viewers.Column;
 import name.abuchen.portfolio.ui.views.StatementOfAssetsViewer.Element;
@@ -39,8 +38,9 @@ public class ExposureColumn extends Column
         this.converterProvider = converterProvider;
         this.boldFontProvider = boldFontProvider;
 
-        setDescription("Delta-adjusted economic exposure. Options use the strike; futures use the linked underlying. "
-                        + "Formula: quantity x reference price x multiplier x delta, converted into the reporting currency.");
+        setDescription("Delta-adjusted economic exposure. Standard options use the strike; futures and K.O. "
+                        + "certificates use the linked underlying. Formula: quantity x reference price x multiplier "
+                        + "x delta, converted into the reporting currency.");
         setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -69,7 +69,8 @@ public class ExposureColumn extends Column
     private Money getExposure(Element element)
     {
         if (element.isSecurity())
-            return getSecurityExposure(element);
+            return ExposureCalculator.calculate(client, element.getSecurityPosition(), dateProvider.get(),
+                            converterProvider.get(), ExposureType.DELTA_ADJUSTED);
 
         String currencyCode = converterProvider.get().getTermCurrency();
         if (element.isCategory() || element.isGroupByTaxonomy())
@@ -78,50 +79,5 @@ public class ExposureColumn extends Column
 
         // Cash accounts do not create market exposure.
         return null;
-    }
-
-    private Money getSecurityExposure(Element element)
-    {
-        Security security = element.getSecurity();
-        String derivativeType = DerivativePositionCalculator.getDerivativeType(security);
-
-        // For ordinary securities, economic exposure equals current market value.
-        if (derivativeType == null)
-            return element.getValuation();
-
-        LocalDate date = dateProvider.get();
-        long shares = element.getSecurityPosition().getShares();
-        long referenceValue;
-        String exposureCurrency;
-
-        if (DerivativePositionCalculator.OPTION.equals(derivativeType))
-        {
-            Long strikeValue = DerivativePositionCalculator.getOptionStrikeQuoteValue(security);
-            if (strikeValue == null)
-                return null;
-
-            referenceValue = strikeValue.longValue();
-            exposureCurrency = security.getCurrencyCode();
-        }
-        else if (DerivativePositionCalculator.FUTURE.equals(derivativeType))
-        {
-            Security underlying = DerivativePositionCalculator.resolveUnderlying(client, security);
-            if (underlying == null)
-                return null;
-
-            referenceValue = underlying.getSecurityPrice(date).getValue();
-            exposureCurrency = underlying.getCurrencyCode();
-        }
-        else
-        {
-            return element.getValuation();
-        }
-
-        double multiplier = security.getMultiplier(date);
-        double delta = SecurityDelta.getDelta(security, date);
-
-        Money rawExposure = DerivativePositionCalculator.valueOf(shares, referenceValue, multiplier * delta,
-                        exposureCurrency);
-        return converterProvider.get().convert(date, rawExposure);
     }
 }
