@@ -82,6 +82,7 @@ public class ExposureManagementView extends AbstractFinanceView
 
     private LocalDate valuationDate = LocalDate.now();
     private CurrencyConverter converter;
+    private ExposureType currentExposureType = ExposureType.DELTA_ADJUSTED;
     private List<ExposureRow> rows = List.of();
 
     @PostConstruct
@@ -235,6 +236,7 @@ public class ExposureManagementView extends AbstractFinanceView
     private void refreshRows(ClientSnapshot snapshot)
     {
         ExposureType type = selectedExposureType();
+        currentExposureType = type;
         List<ExposureRow> answer = new ArrayList<>();
 
         snapshot.getAssetPositions().filter(p -> p.getSecurity() != null).forEach(asset -> {
@@ -255,8 +257,9 @@ public class ExposureManagementView extends AbstractFinanceView
         if (chart == null || chart.isDisposed())
             return;
 
-        // Currency changes require a fresh snapshot and conversion.
-        if (converter == null || !converter.getTermCurrency().equals(currency.getText()))
+        // Exposure type and currency changes require a fresh snapshot/calculation.
+        if (selectedExposureType() != currentExposureType || converter == null
+                        || !converter.getTermCurrency().equals(currency.getText()))
         {
             notifyModelUpdated();
             return;
