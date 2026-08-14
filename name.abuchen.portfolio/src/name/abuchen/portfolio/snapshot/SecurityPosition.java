@@ -97,22 +97,32 @@ public class SecurityPosition
 
     public Money calculateValue()
     {
-        long marketValue = BigDecimal.valueOf(shares) //
-                        .movePointLeft(Values.Share.precision())
-                        .multiply(BigDecimal.valueOf(price.getValue()), Values.MC)
-                        .movePointLeft(Values.Quote.precisionDeltaToMoney()) //
-                        .setScale(0, RoundingMode.HALF_UP).longValue();
-        return Money.of(investment.getCurrencyCode(), marketValue);
+        Security security = getSecurity();
+        if (security == null)
+            return calculateStandardValue();
+
+        return DerivativePositionCalculator.calculateMarketValue(security, shares, price, transactions, converter,
+                        price.getDate());
     }
 
     public Money calculateValue(LocalDate valuationDate)
     {
         Security security = getSecurity();
         if (security == null)
-            return calculateValue();
+            return calculateStandardValue();
 
         return DerivativePositionCalculator.calculateMarketValue(security, shares, price, transactions, converter,
                         valuationDate);
+    }
+
+    private Money calculateStandardValue()
+    {
+        long marketValue = BigDecimal.valueOf(shares) //
+                        .movePointLeft(Values.Share.precision())
+                        .multiply(BigDecimal.valueOf(price.getValue()), Values.MC)
+                        .movePointLeft(Values.Quote.precisionDeltaToMoney()) //
+                        .setScale(0, RoundingMode.HALF_UP).longValue();
+        return Money.of(investment.getCurrencyCode(), marketValue);
     }
 
     public static SecurityPosition split(SecurityPosition position, int weight)
