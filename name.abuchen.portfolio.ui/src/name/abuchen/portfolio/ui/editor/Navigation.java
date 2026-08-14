@@ -52,6 +52,7 @@ import name.abuchen.portfolio.ui.views.ReturnsVolatilityChartView;
 import name.abuchen.portfolio.ui.views.SecuritiesPerformanceView;
 import name.abuchen.portfolio.ui.views.SecurityListView;
 import name.abuchen.portfolio.ui.views.SecurityPriceUpdateView;
+import name.abuchen.portfolio.ui.views.ExposureManagementView;
 import name.abuchen.portfolio.ui.views.StatementOfAssetsHistoryView;
 import name.abuchen.portfolio.ui.views.StatementOfAssetsView;
 import name.abuchen.portfolio.ui.views.currency.CurrencyView;
@@ -493,6 +494,7 @@ public final class Navigation
 
         statementOfAssets.add(new Item(Messages.ClientEditorLabelChart, StatementOfAssetsHistoryView.class, true));
         statementOfAssets.add(new Item(Messages.ClientEditorLabelHoldings, HoldingsPieChartView.class, true));
+        statementOfAssets.add(new Item("Exposuremanagement", ExposureManagementView.class, true)); //$NON-NLS-1$
 
         Item performance = new Item(Messages.ClientEditorLabelPerformance, DashboardView.class, true);
         section.add(performance);
