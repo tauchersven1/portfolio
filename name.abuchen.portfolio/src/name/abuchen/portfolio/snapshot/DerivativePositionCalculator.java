@@ -21,6 +21,7 @@ public final class DerivativePositionCalculator
     public static final String DERIVATIVE_TYPE = "type"; //$NON-NLS-1$
     public static final String UNDERLYING = "underlying"; //$NON-NLS-1$
     public static final String UNDERLYING_SECURITY_UUID = "underlyingSecurityUUID"; //$NON-NLS-1$
+    public static final String STRIKE = "strike"; //$NON-NLS-1$
     public static final String OPTION = "OPTION"; //$NON-NLS-1$
     public static final String FUTURE = "FUTURE"; //$NON-NLS-1$
 
@@ -41,6 +42,25 @@ public final class DerivativePositionCalculator
     public static boolean isFuture(Security security)
     {
         return FUTURE.equals(getDerivativeType(security));
+    }
+
+    public static Long getOptionStrikeQuoteValue(Security security)
+    {
+        String strike = security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, STRIKE).orElse(null);
+        if (strike == null || strike.isBlank())
+            return null;
+
+        try
+        {
+            double value = Double.parseDouble(strike.trim().replace(',', '.'));
+            if (!Double.isFinite(value) || value < 0)
+                return null;
+            return Values.Quote.factorize(value);
+        }
+        catch (NumberFormatException e)
+        {
+            return null;
+        }
     }
 
     public static Security resolveUnderlying(Client client, Security derivative)
