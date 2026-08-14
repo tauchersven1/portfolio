@@ -146,7 +146,7 @@ public class HistoricalPricesPane implements InformationPanePage
                             security.removePrice(price);
                             security.addPrice(price);
 
-                            client.markDirty();
+                            markDirtyAndRecalculate();
                         }).attachTo(column);
         support.addColumn(column);
 
@@ -162,7 +162,7 @@ public class HistoricalPricesPane implements InformationPanePage
         });
         ColumnViewerSorter.create(SecurityPrice.class, "value").attachTo(column); //$NON-NLS-1$
         new ValueEditingSupport(SecurityPrice.class, "value", Values.Quote, number -> number.longValue() != 0) //$NON-NLS-1$
-                        .addListener((e, o, n) -> client.markDirty()).attachTo(column);
+                        .addListener((e, o, n) -> markDirtyAndRecalculate()).attachTo(column);
         support.addColumn(column);
 
         support.createColumns();
@@ -187,7 +187,7 @@ public class HistoricalPricesPane implements InformationPanePage
                 if (dialog.open() != Window.OK)
                     return;
 
-                client.markDirty();
+                markDirtyAndRecalculate();
             }));
             manager.add(new Separator());
         }
@@ -212,7 +212,7 @@ public class HistoricalPricesPane implements InformationPanePage
                         security.removePrice(price);
                     }
 
-                    client.markDirty();
+                    markDirtyAndRecalculate();
                 }
             });
         }
@@ -229,7 +229,7 @@ public class HistoricalPricesPane implements InformationPanePage
 
                     security.removeAllPrices();
 
-                    client.markDirty();
+                    markDirtyAndRecalculate();
                 }
             });
         }
@@ -239,5 +239,11 @@ public class HistoricalPricesPane implements InformationPanePage
             manager.add(new Separator());
             new QuotesContextMenu(view).menuAboutToShow(manager, security);
         }
+    }
+
+    private void markDirtyAndRecalculate()
+    {
+        client.markDirty();
+        view.notifyModelUpdated();
     }
 }
