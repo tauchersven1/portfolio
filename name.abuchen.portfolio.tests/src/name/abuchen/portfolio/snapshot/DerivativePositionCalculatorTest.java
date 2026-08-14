@@ -128,4 +128,36 @@ public class DerivativePositionCalculatorTest
 
         assertNull(DerivativePositionCalculator.resolveUnderlying(client, option));
     }
+
+    @Test
+    public void testOptionStrikeIsExposureReferenceWithoutUnderlying()
+    {
+        Security option = new Security("Option", "USD");
+        option.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "type", "OPTION");
+        option.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "strike", "200.50");
+
+        assertThat(DerivativePositionCalculator.getOptionStrikeQuoteValue(option),
+                        is(Long.valueOf(Values.Quote.factorize(200.50))));
+    }
+
+    @Test
+    public void testOptionStrikeSupportsDecimalComma()
+    {
+        Security option = new Security("Option", "EUR");
+        option.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "strike", "123,45");
+
+        assertThat(DerivativePositionCalculator.getOptionStrikeQuoteValue(option),
+                        is(Long.valueOf(Values.Quote.factorize(123.45))));
+    }
+
+    @Test
+    public void testOptionExposureScalesWithMultiplierAndDelta()
+    {
+        long shares = Values.Share.factorize(2);
+        long strike = Values.Quote.factorize(200.0);
+
+        Money exposure = DerivativePositionCalculator.valueOf(shares, strike, 100.0 * 0.5, "USD");
+
+        assertThat(exposure, is(Money.of("USD", Values.Amount.factorize(20000.0))));
+    }
 }
