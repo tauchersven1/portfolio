@@ -20,8 +20,8 @@ jobs:
           fetch-depth: 0
 
       - name: Apply market value fix
-        shell: python
         run: |
+          python3 - <<'PY'
           from pathlib import Path
 
           path = Path('name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/ExposureManagementView.java')
@@ -42,6 +42,7 @@ jobs:
           if old not in text:
               raise SystemExit('Target block not found')
           path.write_text(text.replace(old, new, 1))
+          PY
 
       - name: Commit fix and remove temporary workflow
         run: |
