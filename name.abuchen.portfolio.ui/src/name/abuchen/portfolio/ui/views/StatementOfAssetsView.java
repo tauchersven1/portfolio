@@ -3,6 +3,7 @@ package name.abuchen.portfolio.ui.views;
 import java.beans.PropertyChangeListener;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.StringJoiner;
 import java.util.function.Function;
 
 import jakarta.inject.Inject;
@@ -12,11 +13,14 @@ import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.MenuManager;
 import org.eclipse.jface.action.Separator;
 import org.eclipse.jface.action.ToolBarManager;
+import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 
 import name.abuchen.portfolio.model.Client;
+import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.CurrencyConverterImpl;
 import name.abuchen.portfolio.money.CurrencyUnit;
@@ -31,6 +35,8 @@ import name.abuchen.portfolio.ui.util.DropDown;
 import name.abuchen.portfolio.ui.util.SimpleAction;
 import name.abuchen.portfolio.ui.util.TableViewerCSVExporter;
 import name.abuchen.portfolio.ui.util.TimeMachineDropDown;
+import name.abuchen.portfolio.ui.util.viewers.Column;
+import name.abuchen.portfolio.ui.views.StatementOfAssetsViewer.Element;
 import name.abuchen.portfolio.ui.views.columns.ExposureColumn;
 import name.abuchen.portfolio.ui.views.panes.ChartPane;
 import name.abuchen.portfolio.ui.views.panes.HistoricalPricesDataQualityPane;
@@ -43,6 +49,8 @@ import name.abuchen.portfolio.util.Pair;
 
 public class StatementOfAssetsView extends AbstractFinanceView
 {
+    private static final String DERIVATIVES_GROUP = "Derivate"; //$NON-NLS-1$
+
     private StatementOfAssetsViewer assetViewer;
     private PropertyChangeListener currencyChangeListener;
     private ClientFilterDropDown clientFilter;
@@ -77,9 +85,7 @@ public class StatementOfAssetsView extends AbstractFinanceView
         updateTitle(getDefaultTitle());
 
         if (selection != null)
-        {
             assetViewer.selectSubject(selection.getSubject());
-        }
     }
 
     @Override
@@ -97,20 +103,14 @@ public class StatementOfAssetsView extends AbstractFinanceView
         };
 
         dropDown.setMenuListener(manager -> {
-
-            // put list of favorite units on top
             getClient().getUsedCurrencies().forEach(unit -> manager.add(asAction.apply(unit)));
-
-            // add a separator marker
             manager.add(new Separator());
 
-            // then all available units
             List<Pair<String, List<CurrencyUnit>>> available = CurrencyUnit.getAvailableCurrencyUnitsGrouped();
             for (Pair<String, List<CurrencyUnit>> pair : available)
             {
                 MenuManager submenu = new MenuManager(pair.getLeft());
                 manager.add(submenu);
-
                 pair.getRight().forEach(unit -> submenu.add(asAction.apply(unit)));
             }
         });
@@ -144,8 +144,12 @@ public class StatementOfAssetsView extends AbstractFinanceView
 
         ExposureColumn exposureColumn = new ExposureColumn(getClient(), () -> currentSnapshotDate,
                         () -> currentConverter, () -> null);
+        exposureColumn.setGroupLabel(DERIVATIVES_GROUP);
         exposureColumn.setVisible(true);
         assetViewer.getColumnHelper().addColumn(exposureColumn);
+
+        assetViewer.getColumnHelper().addColumn(createContractDataColumn());
+        assetViewer.getColumnHelper().addColumn(createPutCallColumn());
 
         assetViewer.setToolBarManager(getViewToolBarManager());
 
@@ -153,7 +157,6 @@ public class StatementOfAssetsView extends AbstractFinanceView
         assetViewer.getColumnHelper().addListener(() -> {
             updateTitle(getDefaultTitle());
 
-            // on Linux, switching between views results in blank columns
             if (Platform.OS_LINUX.equals(Platform.getOS()))
                 notifyModelUpdated();
         });
@@ -165,8 +168,6 @@ public class StatementOfAssetsView extends AbstractFinanceView
         assetViewer.getTableViewer().addSelectionChangedListener(e -> {
             var selection = e.getStructuredSelection();
 
-            // test for a single selection because it might be a cash account or
-            // taxonomy classification
             if (selection.size() == 1)
                 setInformationPaneInput(selection.getFirstElement());
             else
@@ -176,6 +177,81 @@ public class StatementOfAssetsView extends AbstractFinanceView
         notifyModelUpdated();
 
         return control;
+    }
+
+    private Column createContractDataColumn()
+    {
+        Column column = new Column("derivativeContractData", "Contract Data", SWT.LEFT, 260); //$NON-NLS-1$ //$NON-NLS-2$
+        column.setGroupLabel(DERIVATIVES_GROUP);
+        column.setDescription("Compact derivative contract master data: underlying, symbol, exchange, contract month, "
+                        + "trading/expiration/settlement dates, settlement type, contract size and tick size."); //$NON-NLS-1$
+        column.setLabelProvider(new ColumnLabelProvider()
+        {
+            @Override
+            public String getText(Object e)
+            {
+                Element element = (Element) e;
+                if (!element.isSecurity())
+                    return null;
+
+                Security security = element.getSecurity();
+                if (property(security, "type") == null) //$NON-NLS-1$
+                    return null;
+
+                StringJoiner data = new StringJoiner("; "); //$NON-NLS-1$
+                add(data, "Underlying", property(security, "underlying")); //$NON-NLS-1$ //$NON-NLS-2$
+                add(data, "Symbol", property(security, "contractSymbol")); //$NON-NLS-1$ //$NON-NLS-2$
+                add(data, "Exchange", property(security, "exchange")); //$NON-NLS-1$ //$NON-NLS-2$
+                add(data, "Month", property(security, "contractMonth")); //$NON-NLS-1$ //$NON-NLS-2$
+                add(data, "First trading", property(security, "firstTradingDay")); //$NON-NLS-1$ //$NON-NLS-2$
+                add(data, "Expiration", property(security, "expirationDate")); //$NON-NLS-1$ //$NON-NLS-2$
+                add(data, "Last trading", property(security, "lastTradingDay")); //$NON-NLS-1$ //$NON-NLS-2$
+                add(data, "Settlement date", property(security, "settlementDate")); //$NON-NLS-1$ //$NON-NLS-2$
+                add(data, "First notice", property(security, "firstNoticeDay")); //$NON-NLS-1$ //$NON-NLS-2$
+                add(data, "Settlement", property(security, "settlementType")); //$NON-NLS-1$ //$NON-NLS-2$
+                add(data, "Size", property(security, "contractSize")); //$NON-NLS-1$ //$NON-NLS-2$
+                add(data, "Tick", property(security, "tickSize")); //$NON-NLS-1$ //$NON-NLS-2$
+                return data.length() == 0 ? null : data.toString();
+            }
+        });
+        column.setVisible(false);
+        return column;
+    }
+
+    private Column createPutCallColumn()
+    {
+        Column column = new Column("derivativePutCall", "Put / Call", SWT.LEFT, 80); //$NON-NLS-1$ //$NON-NLS-2$
+        column.setGroupLabel(DERIVATIVES_GROUP);
+        column.setLabelProvider(new ColumnLabelProvider()
+        {
+            @Override
+            public String getText(Object e)
+            {
+                Element element = (Element) e;
+                if (!element.isSecurity())
+                    return null;
+
+                String value = property(element.getSecurity(), "putCall"); //$NON-NLS-1$
+                if ("CALL".equals(value)) //$NON-NLS-1$
+                    return "Call"; //$NON-NLS-1$
+                if ("PUT".equals(value)) //$NON-NLS-1$
+                    return "Put"; //$NON-NLS-1$
+                return null;
+            }
+        });
+        column.setVisible(false);
+        return column;
+    }
+
+    private static String property(Security security, String name)
+    {
+        return security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, name).orElse(null);
+    }
+
+    private static void add(StringJoiner data, String label, String value)
+    {
+        if (value != null && !value.isBlank())
+            data.add(label + ": " + value); //$NON-NLS-1$
     }
 
     @Override
