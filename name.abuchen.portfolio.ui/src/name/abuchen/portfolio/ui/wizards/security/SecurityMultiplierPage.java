@@ -33,6 +33,7 @@ import org.eclipse.swt.widgets.Text;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityDelta;
+import name.abuchen.portfolio.model.SecurityKnockoutLevel;
 import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.Values;
@@ -43,6 +44,7 @@ public class SecurityMultiplierPage extends AbstractPage
     private static final String TYPE = "type";
     private static final String UNDERLYING = "underlying";
     private static final String UNDERLYING_SECURITY_UUID = "underlyingSecurityUUID";
+    private static final String FIRST_TRADING_DAY = "firstTradingDay";
     private static final String EXPIRATION_DATE = "expirationDate";
     private static final String LAST_TRADING_DAY = "lastTradingDay";
     private static final String SETTLEMENT_TYPE = "settlementType";
@@ -55,20 +57,23 @@ public class SecurityMultiplierPage extends AbstractPage
     private static final String PUT_CALL = "putCall";
     private static final String STRIKE = "strike";
     private static final String EXERCISE_STYLE = "exerciseStyle";
+    private static final String OPTION_PRODUCT_TYPE = "optionProductType";
+    private static final String INITIAL_KNOCKOUT_LEVEL = "initialKnockoutLevel";
 
     private static final String CONTRACT_MONTH = "contractMonth";
     private static final String FIRST_NOTICE_DAY = "firstNoticeDay";
-    private static final String FINAL_SETTLEMENT_DATE = "finalSettlementDate";
+    private static final String FINAL_SETTLEMENT_DATE = "finalSettlementDate"; // legacy; removed from UI
 
-    private static final String[] DERIVATIVE_PROPERTIES = { TYPE, UNDERLYING, UNDERLYING_SECURITY_UUID, EXPIRATION_DATE,
-                    LAST_TRADING_DAY, SETTLEMENT_TYPE, SETTLEMENT_DATE, EXCHANGE, CONTRACT_SYMBOL, CONTRACT_SIZE,
-                    TICK_SIZE, PUT_CALL, STRIKE, EXERCISE_STYLE, CONTRACT_MONTH, FIRST_NOTICE_DAY,
-                    FINAL_SETTLEMENT_DATE };
+    private static final String[] DERIVATIVE_PROPERTIES = { TYPE, UNDERLYING, UNDERLYING_SECURITY_UUID,
+                    FIRST_TRADING_DAY, EXPIRATION_DATE, LAST_TRADING_DAY, SETTLEMENT_TYPE, SETTLEMENT_DATE, EXCHANGE,
+                    CONTRACT_SYMBOL, CONTRACT_SIZE, TICK_SIZE, PUT_CALL, STRIKE, EXERCISE_STYLE, OPTION_PRODUCT_TYPE,
+                    INITIAL_KNOCKOUT_LEVEL, CONTRACT_MONTH, FIRST_NOTICE_DAY, FINAL_SETTLEMENT_DATE };
 
     private final Client client;
     private final Security security;
     private final List<SecurityMultiplier> multipliers = new ArrayList<>();
     private final List<SecurityDelta> deltas = new ArrayList<>();
+    private final List<SecurityKnockoutLevel> knockoutLevels = new ArrayList<>();
     private final Map<String, Security> underlyingSecurities = new LinkedHashMap<>();
 
     private Combo derivativeType;
@@ -78,6 +83,7 @@ public class SecurityMultiplierPage extends AbstractPage
     private Text contractSymbol;
     private Text contractSize;
     private Text tickSize;
+    private OptionalDateField firstTradingDay;
     private OptionalDateField expirationDate;
     private OptionalDateField lastTradingDay;
     private OptionalDateField settlementDate;
@@ -86,11 +92,13 @@ public class SecurityMultiplierPage extends AbstractPage
     private Combo putCall;
     private Text strike;
     private Combo exerciseStyle;
+    private Combo optionProductType;
+    private Label initialKnockoutLevelLabel;
+    private Text initialKnockoutLevel;
 
     private Group futureGroup;
     private Text contractMonth;
     private OptionalDateField firstNoticeDay;
-    private OptionalDateField finalSettlementDate;
 
     private Composite commonFields;
 
@@ -102,6 +110,11 @@ public class SecurityMultiplierPage extends AbstractPage
     private DateTime deltaEffectiveDate;
     private Text deltaValue;
 
+    private Group knockoutLevelGroup;
+    private TableViewer knockoutLevelViewer;
+    private DateTime knockoutLevelEffectiveDate;
+    private Text knockoutLevelValue;
+
     public SecurityMultiplierPage(Client client, Security security)
     {
         this.client = client;
@@ -109,6 +122,7 @@ public class SecurityMultiplierPage extends AbstractPage
         security.getMultipliers().stream().map(m -> new SecurityMultiplier(m.getDate(), m.getValue()))
                         .forEach(multipliers::add);
         deltas.addAll(SecurityDelta.getDeltas(security));
+        knockoutLevels.addAll(SecurityKnockoutLevel.getLevels(security));
         setTitle("Derivate");
     }
 
@@ -130,12 +144,13 @@ public class SecurityMultiplierPage extends AbstractPage
         masterDataTab.setControl(masterData);
 
         Composite riskParameters = new Composite(tabs, SWT.NONE);
-        GridLayoutFactory.fillDefaults().numColumns(2).margins(10, 10).spacing(10, 8).applyTo(riskParameters);
+        GridLayoutFactory.fillDefaults().numColumns(3).margins(10, 10).spacing(10, 8).applyTo(riskParameters);
         createMultiplierSection(riskParameters);
         createDeltaSection(riskParameters);
+        createKnockoutLevelSection(riskParameters);
 
         TabItem parametersTab = new TabItem(tabs, SWT.NONE);
-        parametersTab.setText("Delta / Multiplikator");
+        parametersTab.setText("Delta / Multiplikator / K.O.");
         parametersTab.setControl(riskParameters);
 
         loadDerivativeData();
@@ -200,8 +215,13 @@ public class SecurityMultiplierPage extends AbstractPage
         tickSize = new Text(commonFields, SWT.BORDER | SWT.RIGHT);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(tickSize);
 
-        expirationDate = new OptionalDateField(commonFields, "Expiration");
+        firstTradingDay = new OptionalDateField(commonFields, "First trading day");
+        expirationDate = new OptionalDateField(commonFields, "Expiration Date");
+
+        addEmptyHalf(commonFields);
         lastTradingDay = new OptionalDateField(commonFields, "Last trading day");
+
+        addEmptyHalf(commonFields);
         settlementDate = new OptionalDateField(commonFields, "Settlement date");
 
         optionGroup = new Group(container, SWT.NONE);
@@ -223,6 +243,24 @@ public class SecurityMultiplierPage extends AbstractPage
         exerciseStyle.setItems("Not specified", "European", "American", "Bermudan");
         exerciseStyle.select(0);
 
+        new Label(optionGroup, SWT.NONE).setText("Product type");
+        optionProductType = new Combo(optionGroup, SWT.READ_ONLY);
+        optionProductType.setItems("Not specified", "Standard option", "K.O. certificate");
+        optionProductType.select(0);
+        optionProductType.addSelectionListener(new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                updateOptionProductControls();
+            }
+        });
+
+        initialKnockoutLevelLabel = new Label(optionGroup, SWT.NONE);
+        initialKnockoutLevelLabel.setText("Initial K.O. level");
+        initialKnockoutLevel = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
+        GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(initialKnockoutLevel);
+
         futureGroup = new Group(container, SWT.NONE);
         futureGroup.setText("Future");
         GridLayoutFactory.fillDefaults().numColumns(4).margins(8, 8).spacing(8, 6).applyTo(futureGroup);
@@ -230,10 +268,15 @@ public class SecurityMultiplierPage extends AbstractPage
 
         new Label(futureGroup, SWT.NONE).setText("Contract month");
         contractMonth = new Text(futureGroup, SWT.BORDER);
-        GridDataFactory.fillDefaults().grab(true, false).applyTo(contractMonth);
+        GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(contractMonth);
 
         firstNoticeDay = new OptionalDateField(futureGroup, "First notice day");
-        finalSettlementDate = new OptionalDateField(futureGroup, "Final settlement date");
+    }
+
+    private static void addEmptyHalf(Composite parent)
+    {
+        new Label(parent, SWT.NONE);
+        new Label(parent, SWT.NONE);
     }
 
     private void createMultiplierSection(Composite container)
@@ -252,11 +295,11 @@ public class SecurityMultiplierPage extends AbstractPage
         viewer.getTable().setHeaderVisible(true);
         viewer.getTable().setLinesVisible(true);
         viewer.setContentProvider(ArrayContentProvider.getInstance());
-        GridDataFactory.fillDefaults().grab(true, true).hint(300, 170).applyTo(viewer.getControl());
+        GridDataFactory.fillDefaults().grab(true, true).hint(275, 170).applyTo(viewer.getControl());
 
         TableViewerColumn dateColumn = new TableViewerColumn(viewer, SWT.NONE);
         dateColumn.getColumn().setText("Valid from");
-        dateColumn.getColumn().setWidth(150);
+        dateColumn.getColumn().setWidth(140);
         dateColumn.setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -268,7 +311,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         TableViewerColumn valueColumn = new TableViewerColumn(viewer, SWT.RIGHT);
         valueColumn.getColumn().setText("Multiplier");
-        valueColumn.getColumn().setWidth(130);
+        valueColumn.getColumn().setWidth(120);
         valueColumn.setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -292,7 +335,7 @@ public class SecurityMultiplierPage extends AbstractPage
         new Label(editor, SWT.NONE).setText("Multiplier");
         multiplierValue = new Text(editor, SWT.BORDER | SWT.RIGHT);
         multiplierValue.setText("1.0");
-        GridDataFactory.fillDefaults().hint(90, SWT.DEFAULT).applyTo(multiplierValue);
+        GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(multiplierValue);
 
         Button addOrReplace = new Button(editor, SWT.PUSH);
         addOrReplace.setText("Add / replace");
@@ -305,7 +348,12 @@ public class SecurityMultiplierPage extends AbstractPage
             }
         });
 
-        Composite actions = new Composite(multiplierGroup, SWT.NONE);
+        createMultiplierActions(multiplierGroup);
+    }
+
+    private void createMultiplierActions(Composite parent)
+    {
+        Composite actions = new Composite(parent, SWT.NONE);
         GridLayoutFactory.fillDefaults().numColumns(2).spacing(8, 0).applyTo(actions);
 
         Button delete = new Button(actions, SWT.PUSH);
@@ -357,11 +405,11 @@ public class SecurityMultiplierPage extends AbstractPage
         deltaViewer.getTable().setHeaderVisible(true);
         deltaViewer.getTable().setLinesVisible(true);
         deltaViewer.setContentProvider(ArrayContentProvider.getInstance());
-        GridDataFactory.fillDefaults().grab(true, true).hint(300, 170).applyTo(deltaViewer.getControl());
+        GridDataFactory.fillDefaults().grab(true, true).hint(275, 170).applyTo(deltaViewer.getControl());
 
         TableViewerColumn dateColumn = new TableViewerColumn(deltaViewer, SWT.NONE);
         dateColumn.getColumn().setText("Valid from");
-        dateColumn.getColumn().setWidth(150);
+        dateColumn.getColumn().setWidth(140);
         dateColumn.setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -373,7 +421,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         TableViewerColumn valueColumn = new TableViewerColumn(deltaViewer, SWT.RIGHT);
         valueColumn.getColumn().setText("Delta");
-        valueColumn.getColumn().setWidth(130);
+        valueColumn.getColumn().setWidth(120);
         valueColumn.setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -397,7 +445,7 @@ public class SecurityMultiplierPage extends AbstractPage
         new Label(editor, SWT.NONE).setText("Delta");
         deltaValue = new Text(editor, SWT.BORDER | SWT.RIGHT);
         deltaValue.setText("1.0");
-        GridDataFactory.fillDefaults().hint(90, SWT.DEFAULT).applyTo(deltaValue);
+        GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(deltaValue);
 
         Button addOrReplace = new Button(editor, SWT.PUSH);
         addOrReplace.setText("Add / replace");
@@ -446,12 +494,116 @@ public class SecurityMultiplierPage extends AbstractPage
         });
     }
 
+    private void createKnockoutLevelSection(Composite container)
+    {
+        knockoutLevelGroup = new Group(container, SWT.NONE);
+        knockoutLevelGroup.setText("Current K.O. level history");
+        GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).spacing(8, 8).applyTo(knockoutLevelGroup);
+        GridDataFactory.fillDefaults().grab(true, true).applyTo(knockoutLevelGroup);
+
+        Label explanation = new Label(knockoutLevelGroup, SWT.WRAP);
+        explanation.setText("The current K.O. level is effective from its date until the next entry. This is useful for open-end K.O. certificates whose K.O. level changes over time.");
+        GridDataFactory.fillDefaults().grab(true, false).applyTo(explanation);
+
+        knockoutLevelViewer = new TableViewer(knockoutLevelGroup, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
+        knockoutLevelViewer.getTable().setHeaderVisible(true);
+        knockoutLevelViewer.getTable().setLinesVisible(true);
+        knockoutLevelViewer.setContentProvider(ArrayContentProvider.getInstance());
+        GridDataFactory.fillDefaults().grab(true, true).hint(275, 170).applyTo(knockoutLevelViewer.getControl());
+
+        TableViewerColumn dateColumn = new TableViewerColumn(knockoutLevelViewer, SWT.NONE);
+        dateColumn.getColumn().setText("Valid from");
+        dateColumn.getColumn().setWidth(140);
+        dateColumn.setLabelProvider(new ColumnLabelProvider()
+        {
+            @Override
+            public String getText(Object element)
+            {
+                return Values.Date.format(((SecurityKnockoutLevel) element).getDate());
+            }
+        });
+
+        TableViewerColumn valueColumn = new TableViewerColumn(knockoutLevelViewer, SWT.RIGHT);
+        valueColumn.getColumn().setText("K.O. level");
+        valueColumn.getColumn().setWidth(120);
+        valueColumn.setLabelProvider(new ColumnLabelProvider()
+        {
+            @Override
+            public String getText(Object element)
+            {
+                return Double.toString(((SecurityKnockoutLevel) element).getLevel());
+            }
+        });
+
+        knockoutLevelViewer.setInput(knockoutLevels);
+        knockoutLevelViewer.addSelectionChangedListener(event -> loadKnockoutLevelSelection());
+
+        Composite editor = new Composite(knockoutLevelGroup, SWT.NONE);
+        GridLayoutFactory.fillDefaults().numColumns(5).spacing(8, 0).applyTo(editor);
+        GridDataFactory.fillDefaults().grab(true, false).applyTo(editor);
+
+        new Label(editor, SWT.NONE).setText("Valid from");
+        knockoutLevelEffectiveDate = new DateTime(editor, SWT.DATE | SWT.DROP_DOWN);
+        setKnockoutLevelDate(LocalDate.now());
+
+        new Label(editor, SWT.NONE).setText("K.O. level");
+        knockoutLevelValue = new Text(editor, SWT.BORDER | SWT.RIGHT);
+        GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(knockoutLevelValue);
+
+        Button addOrReplace = new Button(editor, SWT.PUSH);
+        addOrReplace.setText("Add / replace");
+        addOrReplace.addSelectionListener(new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                addOrReplaceKnockoutLevel();
+            }
+        });
+
+        Composite actions = new Composite(knockoutLevelGroup, SWT.NONE);
+        GridLayoutFactory.fillDefaults().numColumns(2).spacing(8, 0).applyTo(actions);
+
+        Button delete = new Button(actions, SWT.PUSH);
+        delete.setText("Delete selected");
+        delete.addSelectionListener(new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                IStructuredSelection selection = knockoutLevelViewer.getStructuredSelection();
+                if (!selection.isEmpty())
+                {
+                    knockoutLevels.remove(selection.getFirstElement());
+                    knockoutLevelViewer.refresh();
+                }
+            }
+        });
+
+        Button clear = new Button(actions, SWT.PUSH);
+        clear.setText("Clear all");
+        clear.addSelectionListener(new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                if (knockoutLevels.isEmpty() || MessageDialog.openConfirm(getShell(), "Clear K.O. levels",
+                                "Remove all current K.O. level entries?"))
+                {
+                    knockoutLevels.clear();
+                    knockoutLevelViewer.refresh();
+                }
+            }
+        });
+    }
+
     private void loadDerivativeData()
     {
         selectByValue(derivativeType, property(TYPE), "FUTURE", "OPTION");
         selectByValue(settlementType, property(SETTLEMENT_TYPE), "CASH", "PHYSICAL");
         selectByValue(putCall, property(PUT_CALL), "CALL", "PUT");
         selectByValue(exerciseStyle, property(EXERCISE_STYLE), "EUROPEAN", "AMERICAN", "BERMUDAN");
+        selectByValue(optionProductType, property(OPTION_PRODUCT_TYPE), "VANILLA", "KNOCK_OUT_CERTIFICATE");
 
         String underlyingUUID = property(UNDERLYING_SECURITY_UUID);
         Security linkedUnderlying = underlyingUUID == null ? null
@@ -465,13 +617,14 @@ public class SecurityMultiplierPage extends AbstractPage
         contractSize.setText(valueOrEmpty(property(CONTRACT_SIZE)));
         tickSize.setText(valueOrEmpty(property(TICK_SIZE)));
         strike.setText(valueOrEmpty(property(STRIKE)));
+        initialKnockoutLevel.setText(valueOrEmpty(property(INITIAL_KNOCKOUT_LEVEL)));
         contractMonth.setText(valueOrEmpty(property(CONTRACT_MONTH)));
 
+        firstTradingDay.setValue(property(FIRST_TRADING_DAY));
         expirationDate.setValue(property(EXPIRATION_DATE));
         lastTradingDay.setValue(property(LAST_TRADING_DAY));
         settlementDate.setValue(property(SETTLEMENT_DATE));
         firstNoticeDay.setValue(property(FIRST_NOTICE_DAY));
-        finalSettlementDate.setValue(property(FINAL_SETTLEMENT_DATE));
     }
 
     private void updateDerivativeControls()
@@ -484,11 +637,26 @@ public class SecurityMultiplierPage extends AbstractPage
         setEnabledRecursive(futureGroup, isFuture);
         setEnabledRecursive(optionGroup, isOption);
 
+        firstTradingDay.updateEnabled(isDerivative);
         expirationDate.updateEnabled(isDerivative);
         lastTradingDay.updateEnabled(isDerivative);
         settlementDate.updateEnabled(isDerivative);
         firstNoticeDay.updateEnabled(isFuture);
-        finalSettlementDate.updateEnabled(isFuture);
+
+        updateOptionProductControls();
+    }
+
+    private void updateOptionProductControls()
+    {
+        boolean isOption = derivativeType != null && derivativeType.getSelectionIndex() == 2;
+        boolean isKnockout = isOption && optionProductType != null && optionProductType.getSelectionIndex() == 2;
+
+        if (initialKnockoutLevelLabel != null)
+            initialKnockoutLevelLabel.setEnabled(isKnockout);
+        if (initialKnockoutLevel != null)
+            initialKnockoutLevel.setEnabled(isKnockout);
+        if (knockoutLevelGroup != null)
+            setEnabledRecursive(knockoutLevelGroup, isKnockout);
     }
 
     private void loadMultiplierSelection()
@@ -513,24 +681,22 @@ public class SecurityMultiplierPage extends AbstractPage
         deltaValue.setText(Double.toString(selected.getDelta()));
     }
 
+    private void loadKnockoutLevelSelection()
+    {
+        IStructuredSelection selection = knockoutLevelViewer.getStructuredSelection();
+        if (selection.isEmpty())
+            return;
+
+        SecurityKnockoutLevel selected = (SecurityKnockoutLevel) selection.getFirstElement();
+        setKnockoutLevelDate(selected.getDate());
+        knockoutLevelValue.setText(Double.toString(selected.getLevel()));
+    }
+
     private void addOrReplaceMultiplier()
     {
-        double value;
-        try
-        {
-            value = Double.parseDouble(multiplierValue.getText().trim().replace(',', '.'));
-        }
-        catch (NumberFormatException e)
-        {
-            showInvalidMultiplier();
+        double value = parsePositive(multiplierValue, "Invalid multiplier", "Enter a positive numeric multiplier.");
+        if (Double.isNaN(value))
             return;
-        }
-
-        if (!Double.isFinite(value) || value <= 0)
-        {
-            showInvalidMultiplier();
-            return;
-        }
 
         SecurityMultiplier replacement = SecurityMultiplier.of(getMultiplierDate(), value);
         int index = Collections.binarySearch(multipliers, replacement);
@@ -573,11 +739,47 @@ public class SecurityMultiplierPage extends AbstractPage
         deltaViewer.setSelection(new StructuredSelection(replacement), true);
     }
 
-    private void showInvalidMultiplier()
+    private void addOrReplaceKnockoutLevel()
     {
-        MessageDialog.openError(getShell(), "Invalid multiplier", "Enter a positive numeric multiplier.");
-        multiplierValue.setFocus();
-        multiplierValue.selectAll();
+        double value = parsePositive(knockoutLevelValue, "Invalid K.O. level", "Enter a positive numeric K.O. level.");
+        if (Double.isNaN(value))
+            return;
+
+        SecurityKnockoutLevel replacement = SecurityKnockoutLevel.of(getKnockoutLevelDate(), value);
+        int index = Collections.binarySearch(knockoutLevels, replacement);
+        if (index >= 0)
+            knockoutLevels.set(index, replacement);
+        else
+            knockoutLevels.add(~index, replacement);
+
+        knockoutLevelViewer.refresh();
+        knockoutLevelViewer.setSelection(new StructuredSelection(replacement), true);
+    }
+
+    private double parsePositive(Text control, String title, String message)
+    {
+        double value;
+        try
+        {
+            value = Double.parseDouble(control.getText().trim().replace(',', '.'));
+        }
+        catch (NumberFormatException e)
+        {
+            MessageDialog.openError(getShell(), title, message);
+            control.setFocus();
+            control.selectAll();
+            return Double.NaN;
+        }
+
+        if (!Double.isFinite(value) || value <= 0)
+        {
+            MessageDialog.openError(getShell(), title, message);
+            control.setFocus();
+            control.selectAll();
+            return Double.NaN;
+        }
+
+        return value;
     }
 
     private void showInvalidDelta()
@@ -609,6 +811,18 @@ public class SecurityMultiplierPage extends AbstractPage
             deltaEffectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth());
     }
 
+    private LocalDate getKnockoutLevelDate()
+    {
+        return LocalDate.of(knockoutLevelEffectiveDate.getYear(), knockoutLevelEffectiveDate.getMonth() + 1,
+                        knockoutLevelEffectiveDate.getDay());
+    }
+
+    private void setKnockoutLevelDate(LocalDate date)
+    {
+        if (knockoutLevelEffectiveDate != null)
+            knockoutLevelEffectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth());
+    }
+
     public void applyChanges()
     {
         security.removeAllMultipliers();
@@ -618,6 +832,7 @@ public class SecurityMultiplierPage extends AbstractPage
         int typeIndex = derivativeType.getSelectionIndex();
         if (typeIndex <= 0)
         {
+            SecurityKnockoutLevel.replaceAll(security, Collections.emptyList());
             for (String name : DERIVATIVE_PROPERTIES)
                 setProperty(name, null);
             return;
@@ -630,6 +845,7 @@ public class SecurityMultiplierPage extends AbstractPage
         setProperty(UNDERLYING, underlyingText);
         setProperty(UNDERLYING_SECURITY_UUID, selectedUnderlying == null ? null : selectedUnderlying.getUUID());
 
+        setProperty(FIRST_TRADING_DAY, firstTradingDay.getValue());
         setProperty(EXPIRATION_DATE, expirationDate.getValue());
         setProperty(LAST_TRADING_DAY, lastTradingDay.getValue());
         setProperty(SETTLEMENT_DATE, settlementDate.getValue());
@@ -638,24 +854,33 @@ public class SecurityMultiplierPage extends AbstractPage
         setProperty(CONTRACT_SYMBOL, text(contractSymbol));
         setProperty(CONTRACT_SIZE, text(contractSize));
         setProperty(TICK_SIZE, text(tickSize));
+        setProperty(FINAL_SETTLEMENT_DATE, null);
 
         if (typeIndex == 2)
         {
             setProperty(PUT_CALL, comboValue(putCall, "CALL", "PUT"));
             setProperty(STRIKE, text(strike));
             setProperty(EXERCISE_STYLE, comboValue(exerciseStyle, "EUROPEAN", "AMERICAN", "BERMUDAN"));
+            setProperty(OPTION_PRODUCT_TYPE, comboValue(optionProductType, "VANILLA", "KNOCK_OUT_CERTIFICATE"));
+
+            boolean isKnockout = optionProductType.getSelectionIndex() == 2;
+            setProperty(INITIAL_KNOCKOUT_LEVEL, isKnockout ? text(initialKnockoutLevel) : null);
+            SecurityKnockoutLevel.replaceAll(security, isKnockout ? knockoutLevels : Collections.emptyList());
+
             setProperty(CONTRACT_MONTH, null);
             setProperty(FIRST_NOTICE_DAY, null);
-            setProperty(FINAL_SETTLEMENT_DATE, null);
         }
         else
         {
             setProperty(PUT_CALL, null);
             setProperty(STRIKE, null);
             setProperty(EXERCISE_STYLE, null);
+            setProperty(OPTION_PRODUCT_TYPE, null);
+            setProperty(INITIAL_KNOCKOUT_LEVEL, null);
+            SecurityKnockoutLevel.replaceAll(security, Collections.emptyList());
+
             setProperty(CONTRACT_MONTH, text(contractMonth));
             setProperty(FIRST_NOTICE_DAY, firstNoticeDay.getValue());
-            setProperty(FINAL_SETTLEMENT_DATE, finalSettlementDate.getValue());
         }
     }
 
