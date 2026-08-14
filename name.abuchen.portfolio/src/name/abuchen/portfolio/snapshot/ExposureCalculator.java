@@ -34,10 +34,20 @@ public final class ExposureCalculator
         if (security == null)
             return null;
 
-        if (exposureType == ExposureType.MARKET_VALUE)
-            return converter.convert(date, position.calculateValue(date));
-
         String derivativeType = DerivativePositionCalculator.getDerivativeType(security);
+
+        if (exposureType == ExposureType.MARKET_VALUE)
+        {
+            if (DerivativePositionCalculator.OPTION.equals(derivativeType))
+            {
+                Money marketValue = DerivativePositionCalculator.valueOf(position.getShares(),
+                                position.getPrice().getValue(), security.getMultiplier(date), security.getCurrencyCode());
+                return converter.convert(date, marketValue);
+            }
+
+            return converter.convert(date, position.calculateValue(date));
+        }
+
         if (derivativeType == null)
             return converter.convert(date, position.calculateValue(date));
 
