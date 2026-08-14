@@ -69,8 +69,6 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
         model.setExchangeRateProviderFactory(factory);
         setModel(model);
 
-        // set portfolio only if exactly one exists
-        // (otherwise force user to choose)
         List<Portfolio> activePortfolios = client.getActivePortfolios();
         if (activePortfolios.size() == 1)
             model.setPortfolio(activePortfolios.get(0));
@@ -88,19 +86,11 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
     @Override
     protected void createFormElements(Composite editArea)
     {
-        //
-        // input elements
-        //
-
-        // security
-
         ComboInput securities = new ComboInput(editArea, Messages.ColumnSecurity);
         securities.value.setInput(including(client.getActiveSecurities(), model().getSecurity()));
         securities.value.setLabelProvider(new SecurityNameLabelProvider(client));
         securities.bindValue(Properties.security.name(), Messages.MsgMissingSecurity);
         securities.bindCurrency(Properties.securityCurrencyCode.name());
-
-        // portfolio + reference account
 
         ComboInput portfolio = new ComboInput(editArea, Messages.ColumnPortfolio);
         portfolio.value.setInput(including(client.getActivePortfolios(), model().getPortfolio()));
@@ -121,17 +111,17 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
             currencyInput = comboInput;
         }
 
-        // date + time
-
         DateTimeInput dateTime = new DateTimeInput(editArea, Messages.ColumnDate);
         dateTime.bindDate(Properties.date.name());
         dateTime.bindTime(Properties.time.name());
         dateTime.bindButton(() -> model().getTime(), time -> model().setTime(time));
 
-        // other input fields
-
         Input shares = new Input(editArea, Messages.ColumnShares);
         shares.bindValue(Properties.shares.name(), Messages.ColumnShares, Values.Share, true);
+
+        Input multiplier = new Input(editArea, "x Multiplikator"); //$NON-NLS-1$
+        multiplier.bindBigDecimal(Properties.multiplier.name(), "0.######"); //$NON-NLS-1$
+        multiplier.currency.setVisible(false);
 
         Input quote = new Input(editArea, "x " + Messages.ColumnQuote); //$NON-NLS-1$
         quote.bindBigDecimal(Properties.quote.name(), Values.Quote.pattern());
@@ -160,8 +150,6 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
                         true);
         convertedGrossValue.bindCurrency(Properties.transactionCurrencyCode.name());
 
-        // fees
-
         Label plusForexFees = new Label(editArea, SWT.NONE);
         plusForexFees.setText("+"); //$NON-NLS-1$
 
@@ -172,8 +160,6 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
         Input fees = new Input(editArea, sign() + Messages.ColumnFees);
         fees.bindValue(Properties.fees.name(), Messages.ColumnFees, Values.Amount, false);
         fees.bindCurrency(Properties.transactionCurrencyCode.name());
-
-        // taxes
 
         Label plusForexTaxes = new Label(editArea, SWT.NONE);
         plusForexTaxes.setText("+"); //$NON-NLS-1$
@@ -186,15 +172,11 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
         taxes.bindValue(Properties.taxes.name(), Messages.ColumnTaxes, Values.Amount, false);
         taxes.bindCurrency(Properties.transactionCurrencyCode.name());
 
-        // total
-
         String label = getTotalLabel();
         Input total = new Input(editArea, "= " + label); //$NON-NLS-1$
         total.bindValue(Properties.total.name(), label, Values.Amount,
                         model().getType() != PortfolioTransaction.Type.DELIVERY_OUTBOUND);
         total.bindCurrency(Properties.transactionCurrencyCode.name());
-
-        // note
 
         Label lblNote = new Label(editArea, SWT.LEFT);
         lblNote.setText(Messages.ColumnNote);
@@ -203,11 +185,6 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
         IObservableValue<?> noteObservable = BeanProperties.value(Properties.note.name()).observe(model);
         context.bindValue(targetNote, noteObservable);
 
-        //
-        // form layout
-        //
-
-        // measuring the width requires that the font has been applied before
         stylingEngine.style(editArea);
 
         int width = amountWidth(grossValue.value);
@@ -228,8 +205,8 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
 
         startingWith(securities.label).width(labelWidth);
 
-        // shares - quote - gross value
         startingWith(dateTime.date.getControl()).thenBelow(shares.value).width(width).label(shares.label)
+                        .thenRight(multiplier.label).thenRight(multiplier.value).width(width)
                         .thenRight(quote.label).thenRight(quote.value).width(width).thenRight(quote.currency)
                         .width(width).thenRight(grossValue.label).thenRight(grossValue.value).width(width)
                         .thenRight(grossValue.currency);
@@ -239,16 +216,11 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
                         .width(width);
 
         startingWith(grossValue.value)
-                        // converted gross value
                         .thenBelow(convertedGrossValue.value).width(width).label(convertedGrossValue.label)
                         .suffix(convertedGrossValue.currency)
-                        // fees
                         .thenBelow(fees.value).width(width).label(fees.label).suffix(fees.currency)
-                        // taxes
                         .thenBelow(taxes.value).width(width).label(taxes.label).suffix(taxes.currency)
-                        // total
                         .thenBelow(total.value).width(width).label(total.label).suffix(total.currency)
-                        // note
                         .thenBelow(valueNote).height(SWTHelper.lineHeight(valueNote) * 3)
                         .left(securities.value.getControl()).right(total.value).label(lblNote);
 
@@ -258,30 +230,21 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
         startingWith(taxes.value).thenLeft(plusForexTaxes).thenLeft(forexTaxes.currency).width(currencyWidth)
                         .thenLeft(forexTaxes.value).width(width).thenLeft(forexTaxes.label);
 
-        //
-        // hide / show exchange rate if necessary
-        //
-
         model.addPropertyChangeListener(Properties.exchangeRateCurrencies.name(), event -> { // NOSONAR
             String securityCurrency = model().getSecurityCurrencyCode();
             String accountCurrency = model().getTransactionCurrencyCode();
-
-            // make exchange rate visible if both are set but different
             boolean visible = securityCurrency.length() > 0 && accountCurrency.length() > 0
                             && !securityCurrency.equals(accountCurrency);
 
             exchangeRate.setVisible(visible);
             convertedGrossValue.setVisible(visible);
-
             forexFees.setVisible(visible);
             plusForexFees.setVisible(visible);
             fees.label.setVisible(!visible);
-
             forexTaxes.setVisible(visible);
             plusForexTaxes.setVisible(visible);
             taxes.label.setVisible(!visible);
 
-            // set fx taxes and tx fees to 0 if not visible
             if (!visible)
             {
                 model().setForexFees(0);
