@@ -26,6 +26,8 @@ import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.DateTime;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.TabFolder;
+import org.eclipse.swt.widgets.TabItem;
 import org.eclipse.swt.widgets.Text;
 
 import name.abuchen.portfolio.model.Client;
@@ -107,18 +109,34 @@ public class SecurityMultiplierPage extends AbstractPage
         security.getMultipliers().stream().map(m -> new SecurityMultiplier(m.getDate(), m.getValue()))
                         .forEach(multipliers::add);
         deltas.addAll(SecurityDelta.getDeltas(security));
-        setTitle("Derivatives");
+        setTitle("Derivate");
     }
 
     @Override
     public void createControl(Composite parent)
     {
         Composite container = new Composite(parent, SWT.NONE);
-        GridLayoutFactory.fillDefaults().numColumns(1).margins(10, 10).spacing(8, 8).applyTo(container);
+        GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).spacing(0, 0).applyTo(container);
 
-        createDerivativeMasterData(container);
-        createMultiplierSection(container);
-        createDeltaSection(container);
+        TabFolder tabs = new TabFolder(container, SWT.NONE);
+        GridDataFactory.fillDefaults().grab(true, true).applyTo(tabs);
+
+        Composite masterData = new Composite(tabs, SWT.NONE);
+        GridLayoutFactory.fillDefaults().numColumns(1).margins(10, 10).spacing(8, 8).applyTo(masterData);
+        createDerivativeMasterData(masterData);
+
+        TabItem masterDataTab = new TabItem(tabs, SWT.NONE);
+        masterDataTab.setText("Stammdaten");
+        masterDataTab.setControl(masterData);
+
+        Composite riskParameters = new Composite(tabs, SWT.NONE);
+        GridLayoutFactory.fillDefaults().numColumns(2).margins(10, 10).spacing(10, 8).applyTo(riskParameters);
+        createMultiplierSection(riskParameters);
+        createDeltaSection(riskParameters);
+
+        TabItem parametersTab = new TabItem(tabs, SWT.NONE);
+        parametersTab.setText("Delta / Multiplikator");
+        parametersTab.setControl(riskParameters);
 
         loadDerivativeData();
         updateDerivativeControls();
@@ -153,8 +171,8 @@ public class SecurityMultiplierPage extends AbstractPage
         new Label(commonFields, SWT.NONE).setText("Underlying");
         underlying = new Combo(commonFields, SWT.DROP_DOWN);
         underlying.setToolTipText("Select another security or enter a free-text underlying");
-        client.getSecurities().stream().filter(s -> s != security).sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName()))
-                        .forEach(s -> {
+        client.getSecurities().stream().filter(s -> s != security)
+                        .sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName())).forEach(s -> {
                             String label = underlyingLabel(s);
                             underlyingSecurities.put(label, s);
                             underlying.add(label);
@@ -226,18 +244,19 @@ public class SecurityMultiplierPage extends AbstractPage
         GridDataFactory.fillDefaults().grab(true, true).applyTo(multiplierGroup);
 
         Label explanation = new Label(multiplierGroup, SWT.WRAP);
-        explanation.setText("A multiplier is effective from its date until the next entry. Before the first entry, the multiplier is 1.0.");
+        explanation.setText(
+                        "A multiplier is effective from its date until the next entry. Before the first entry, the multiplier is 1.0.");
         GridDataFactory.fillDefaults().grab(true, false).applyTo(explanation);
 
         viewer = new TableViewer(multiplierGroup, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         viewer.getTable().setHeaderVisible(true);
         viewer.getTable().setLinesVisible(true);
         viewer.setContentProvider(ArrayContentProvider.getInstance());
-        GridDataFactory.fillDefaults().grab(true, true).hint(SWT.DEFAULT, 120).applyTo(viewer.getControl());
+        GridDataFactory.fillDefaults().grab(true, true).hint(300, 170).applyTo(viewer.getControl());
 
         TableViewerColumn dateColumn = new TableViewerColumn(viewer, SWT.NONE);
         dateColumn.getColumn().setText("Valid from");
-        dateColumn.getColumn().setWidth(180);
+        dateColumn.getColumn().setWidth(150);
         dateColumn.setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -249,7 +268,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         TableViewerColumn valueColumn = new TableViewerColumn(viewer, SWT.RIGHT);
         valueColumn.getColumn().setText("Multiplier");
-        valueColumn.getColumn().setWidth(180);
+        valueColumn.getColumn().setWidth(130);
         valueColumn.setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -273,7 +292,7 @@ public class SecurityMultiplierPage extends AbstractPage
         new Label(editor, SWT.NONE).setText("Multiplier");
         multiplierValue = new Text(editor, SWT.BORDER | SWT.RIGHT);
         multiplierValue.setText("1.0");
-        GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(multiplierValue);
+        GridDataFactory.fillDefaults().hint(90, SWT.DEFAULT).applyTo(multiplierValue);
 
         Button addOrReplace = new Button(editor, SWT.PUSH);
         addOrReplace.setText("Add / replace");
@@ -312,7 +331,8 @@ public class SecurityMultiplierPage extends AbstractPage
             @Override
             public void widgetSelected(SelectionEvent e)
             {
-                if (multipliers.isEmpty() || MessageDialog.openConfirm(getShell(), "Clear multipliers", "Remove all multiplier entries?"))
+                if (multipliers.isEmpty() || MessageDialog.openConfirm(getShell(), "Clear multipliers",
+                                "Remove all multiplier entries?"))
                 {
                     multipliers.clear();
                     viewer.refresh();
@@ -329,18 +349,19 @@ public class SecurityMultiplierPage extends AbstractPage
         GridDataFactory.fillDefaults().grab(true, true).applyTo(deltaGroup);
 
         Label explanation = new Label(deltaGroup, SWT.WRAP);
-        explanation.setText("Delta is effective from its date until the next entry. Before the first entry, Delta is 1.0. Standard option deltas must be between -1.0 and 1.0.");
+        explanation.setText(
+                        "Delta is effective from its date until the next entry. Before the first entry, Delta is 1.0. Standard option deltas must be between -1.0 and 1.0.");
         GridDataFactory.fillDefaults().grab(true, false).applyTo(explanation);
 
         deltaViewer = new TableViewer(deltaGroup, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
         deltaViewer.getTable().setHeaderVisible(true);
         deltaViewer.getTable().setLinesVisible(true);
         deltaViewer.setContentProvider(ArrayContentProvider.getInstance());
-        GridDataFactory.fillDefaults().grab(true, true).hint(SWT.DEFAULT, 120).applyTo(deltaViewer.getControl());
+        GridDataFactory.fillDefaults().grab(true, true).hint(300, 170).applyTo(deltaViewer.getControl());
 
         TableViewerColumn dateColumn = new TableViewerColumn(deltaViewer, SWT.NONE);
         dateColumn.getColumn().setText("Valid from");
-        dateColumn.getColumn().setWidth(180);
+        dateColumn.getColumn().setWidth(150);
         dateColumn.setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -352,7 +373,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         TableViewerColumn valueColumn = new TableViewerColumn(deltaViewer, SWT.RIGHT);
         valueColumn.getColumn().setText("Delta");
-        valueColumn.getColumn().setWidth(180);
+        valueColumn.getColumn().setWidth(130);
         valueColumn.setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -367,6 +388,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         Composite editor = new Composite(deltaGroup, SWT.NONE);
         GridLayoutFactory.fillDefaults().numColumns(5).spacing(8, 0).applyTo(editor);
+        GridDataFactory.fillDefaults().grab(true, false).applyTo(editor);
 
         new Label(editor, SWT.NONE).setText("Valid from");
         deltaEffectiveDate = new DateTime(editor, SWT.DATE | SWT.DROP_DOWN);
@@ -375,7 +397,7 @@ public class SecurityMultiplierPage extends AbstractPage
         new Label(editor, SWT.NONE).setText("Delta");
         deltaValue = new Text(editor, SWT.BORDER | SWT.RIGHT);
         deltaValue.setText("1.0");
-        GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(deltaValue);
+        GridDataFactory.fillDefaults().hint(90, SWT.DEFAULT).applyTo(deltaValue);
 
         Button addOrReplace = new Button(editor, SWT.PUSH);
         addOrReplace.setText("Add / replace");
@@ -414,7 +436,8 @@ public class SecurityMultiplierPage extends AbstractPage
             @Override
             public void widgetSelected(SelectionEvent e)
             {
-                if (deltas.isEmpty() || MessageDialog.openConfirm(getShell(), "Clear deltas", "Remove all Delta entries?"))
+                if (deltas.isEmpty()
+                                || MessageDialog.openConfirm(getShell(), "Clear deltas", "Remove all Delta entries?"))
                 {
                     deltas.clear();
                     deltaViewer.refresh();
@@ -431,9 +454,11 @@ public class SecurityMultiplierPage extends AbstractPage
         selectByValue(exerciseStyle, property(EXERCISE_STYLE), "EUROPEAN", "AMERICAN", "BERMUDAN");
 
         String underlyingUUID = property(UNDERLYING_SECURITY_UUID);
-        Security linkedUnderlying = underlyingUUID == null ? null : client.getSecurities().stream()
-                        .filter(s -> underlyingUUID.equals(s.getUUID())).findFirst().orElse(null);
-        underlying.setText(linkedUnderlying != null ? underlyingLabel(linkedUnderlying) : valueOrEmpty(property(UNDERLYING)));
+        Security linkedUnderlying = underlyingUUID == null ? null
+                        : client.getSecurities().stream().filter(s -> underlyingUUID.equals(s.getUUID())).findFirst()
+                                        .orElse(null);
+        underlying.setText(
+                        linkedUnderlying != null ? underlyingLabel(linkedUnderlying) : valueOrEmpty(property(UNDERLYING)));
 
         exchange.setText(valueOrEmpty(property(EXCHANGE)));
         contractSymbol.setText(valueOrEmpty(property(CONTRACT_SYMBOL)));
