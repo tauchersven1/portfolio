@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.Objects;
 import java.util.function.Supplier;
 
+import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Font;
@@ -38,8 +39,8 @@ public class ExposureColumn extends Column
         this.converterProvider = converterProvider;
         this.boldFontProvider = boldFontProvider;
 
-        setDescription("Delta-adjusted economic exposure. Options use the linked underlying; futures use the futures quote. "
-                        + "Formula: quantity x price x multiplier x delta, converted into the reporting currency.");
+        setDescription("Delta-adjusted economic exposure. Options use the strike; futures use the linked underlying. "
+                        + "Formula: quantity x reference price x multiplier x delta, converted into the reporting currency.");
         setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -53,7 +54,12 @@ public class ExposureColumn extends Column
             public Font getFont(Object e)
             {
                 Element element = (Element) e;
-                return element.isGroupByTaxonomy() || element.isCategory() ? boldFontProvider.get() : null;
+                if (!element.isGroupByTaxonomy() && !element.isCategory())
+                    return null;
+
+                Font font = boldFontProvider == null ? null : boldFontProvider.get();
+                return font != null ? font
+                                : JFaceResources.getFontRegistry().getBold(JFaceResources.DEFAULT_FONT);
             }
         });
         setComparator(new ElementComparator(new AttributeComparator(e -> getExposure((Element) e))));
@@ -85,22 +91,26 @@ public class ExposureColumn extends Column
 
         LocalDate date = dateProvider.get();
         long shares = element.getSecurityPosition().getShares();
-        long quoteValue;
+        long referenceValue;
         String exposureCurrency;
 
         if (DerivativePositionCalculator.OPTION.equals(derivativeType))
+        {
+            Long strikeValue = DerivativePositionCalculator.getOptionStrikeQuoteValue(security);
+            if (strikeValue == null)
+                return null;
+
+            referenceValue = strikeValue.longValue();
+            exposureCurrency = security.getCurrencyCode();
+        }
+        else if (DerivativePositionCalculator.FUTURE.equals(derivativeType))
         {
             Security underlying = DerivativePositionCalculator.resolveUnderlying(client, security);
             if (underlying == null)
                 return null;
 
-            quoteValue = underlying.getSecurityPrice(date).getValue();
+            referenceValue = underlying.getSecurityPrice(date).getValue();
             exposureCurrency = underlying.getCurrencyCode();
-        }
-        else if (DerivativePositionCalculator.FUTURE.equals(derivativeType))
-        {
-            quoteValue = element.getSecurityPosition().getPrice().getValue();
-            exposureCurrency = security.getCurrencyCode();
         }
         else
         {
@@ -110,7 +120,7 @@ public class ExposureColumn extends Column
         double multiplier = security.getMultiplier(date);
         double delta = SecurityDelta.getDelta(security, date);
 
-        Money rawExposure = DerivativePositionCalculator.valueOf(shares, quoteValue, multiplier * delta,
+        Money rawExposure = DerivativePositionCalculator.valueOf(shares, referenceValue, multiplier * delta,
                         exposureCurrency);
         return converterProvider.get().convert(date, rawExposure);
     }
