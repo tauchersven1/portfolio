@@ -1,6 +1,7 @@
 name: Feature Build
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - agent/security-multiplier
