@@ -150,6 +150,11 @@ public class StatementOfAssetsView extends AbstractFinanceView
         addDerivativeContractColumns();
         assetViewer.getColumnHelper().addColumn(createPutCallColumn());
 
+        // createControl() restores the column configuration before the custom derivative
+        // columns are registered. Re-apply it now so persisted derivative columns are
+        // resolved by their stable IDs as well.
+        assetViewer.getColumnHelper().createColumns();
+
         assetViewer.setToolBarManager(getViewToolBarManager());
 
         updateTitle(getDefaultTitle());

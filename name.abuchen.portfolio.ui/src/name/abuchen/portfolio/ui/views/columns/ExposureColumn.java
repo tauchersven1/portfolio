@@ -72,12 +72,14 @@ public class ExposureColumn extends Column
             return ExposureCalculator.calculate(client, element.getSecurityPosition(), dateProvider.get(),
                             converterProvider.get(), ExposureType.DELTA_ADJUSTED);
 
+        if (element.isAccount())
+            return element.getValuation();
+
         String currencyCode = converterProvider.get().getTermCurrency();
         if (element.isCategory() || element.isGroupByTaxonomy())
             return element.getChildren().map(this::getExposure).filter(Objects::nonNull)
                             .collect(MoneyCollectors.sum(currencyCode));
 
-        // Cash accounts do not create market exposure.
         return null;
     }
 }

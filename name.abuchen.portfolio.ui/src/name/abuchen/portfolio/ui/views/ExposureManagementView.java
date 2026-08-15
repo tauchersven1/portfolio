@@ -140,7 +140,7 @@ public class ExposureManagementView extends AbstractFinanceView
 
         exposureType = combo(filters, "Exposure type", "Delta adjusted", "Notional", "Market value");
         instrumentType = combo(filters, "Instrument type", "All", "Derivatives", "Option", "Future",
-                        "K.O. certificate", "Non-derivatives");
+                        "K.O. certificate", "Non-derivatives", "Cash");
         instrumentType.select(1);
         underlying = combo(filters, "Underlying", ALL);
         putCall = combo(filters, "Put / Call", ALL, "Call", "Put", "Not specified");
@@ -239,9 +239,19 @@ public class ExposureManagementView extends AbstractFinanceView
         currentExposureType = type;
         List<ExposureRow> answer = new ArrayList<>();
 
-        snapshot.getAssetPositions().filter(p -> p.getSecurity() != null).forEach(asset -> {
+        snapshot.getAssetPositions().forEach(asset -> {
             Security security = asset.getSecurity();
             SecurityPosition position = asset.getPosition();
+
+            if (security == null)
+            {
+                Money exposure = asset.getValuation();
+                if (!exposure.isZero())
+                    answer.add(new ExposureRow(null, position, exposure, NO_MATURITY, null, "Cash", "Cash",
+                                    asset.getDescription()));
+                return;
+            }
+
             Money exposure = ExposureCalculator.calculate(getClient(), position, valuationDate, converter, type);
             if (exposure == null || exposure.isZero())
                 return;
@@ -295,16 +305,22 @@ public class ExposureManagementView extends AbstractFinanceView
     private boolean matchesFilters(ExposureRow row)
     {
         String selectedInstrument = instrumentType.getText();
-        boolean derivative = DerivativePositionCalculator.getDerivativeType(row.security()) != null;
+        boolean cash = row.security() == null;
+        boolean derivative = !cash && DerivativePositionCalculator.getDerivativeType(row.security()) != null;
         if ("Derivatives".equals(selectedInstrument) && !derivative)
             return false;
-        if ("Option".equals(selectedInstrument) && !DerivativePositionCalculator.isOption(row.security()))
+        if ("Option".equals(selectedInstrument)
+                        && (cash || !DerivativePositionCalculator.isOption(row.security())))
             return false;
-        if ("Future".equals(selectedInstrument) && !DerivativePositionCalculator.isFuture(row.security()))
+        if ("Future".equals(selectedInstrument)
+                        && (cash || !DerivativePositionCalculator.isFuture(row.security())))
             return false;
-        if ("K.O. certificate".equals(selectedInstrument) && !ExposureCalculator.isKnockoutCertificate(row.security()))
+        if ("K.O. certificate".equals(selectedInstrument)
+                        && (cash || !ExposureCalculator.isKnockoutCertificate(row.security())))
             return false;
-        if ("Non-derivatives".equals(selectedInstrument) && derivative)
+        if ("Non-derivatives".equals(selectedInstrument) && (cash || derivative))
+            return false;
+        if ("Cash".equals(selectedInstrument) && !cash)
             return false;
 
         if (!ALL.equals(underlying.getText()) && !underlying.getText().equals(row.underlying()))

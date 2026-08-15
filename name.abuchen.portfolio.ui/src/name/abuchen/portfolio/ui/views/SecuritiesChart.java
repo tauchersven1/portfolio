@@ -709,8 +709,19 @@ public class SecuritiesChart
 
         label = new Label(composite, SWT.NONE);
         label.setText(MessageFormat.format(Messages.LabelToolTipInvestmentDetails, Values.Share.format(t.getShares()),
-                        Values.CalculatedQuote.format(
-                                        t.getGrossPricePerShare(converter.with(t.getSecurity().getCurrencyCode())))));
+                        Values.CalculatedQuote.format(getTransactionQuote(t))));
+    }
+
+    private Quote getTransactionQuote(PortfolioTransaction transaction)
+    {
+        Security security = transaction.getSecurity();
+        Quote grossPrice = transaction.getGrossPricePerShare(converter.with(security.getCurrencyCode()));
+        double multiplier = security.getMultiplier(transaction.getDateTime().toLocalDate());
+
+        if (multiplier == 0d || multiplier == 1d)
+            return grossPrice;
+
+        return Quote.of(grossPrice.getCurrencyCode(), Math.round(grossPrice.getAmount() / multiplier));
     }
 
     private void addDividendTooltip(Composite composite, AccountTransaction t)
@@ -1460,8 +1471,7 @@ public class SecuritiesChart
                 if (showLabels)
                 {
                     String label = Values.Share.format(t.getType().isPurchase() ? t.getShares() : -t.getShares());
-                    double value = t.getGrossPricePerShare(converter.with(t.getSecurity().getCurrencyCode()))
-                                    .getAmount() / Values.Quote.divider();
+                    double value = getTransactionQuote(t).getAmount() / Values.Quote.divider();
                     chart.addMarkerLine(t.getDateTime().toLocalDate(), color, label, value);
                 }
                 else
@@ -1473,10 +1483,8 @@ public class SecuritiesChart
             LocalDate[] dates = transactions.stream().map(PortfolioTransaction::getDateTime).map(d -> d.toLocalDate())
                             .toArray(size -> new LocalDate[size]);
 
-            double[] values = transactions.stream().mapToDouble(
-                            t -> t.getGrossPricePerShare(converter.with(t.getSecurity().getCurrencyCode())).getAmount()
-                                            / Values.Quote.divider())
-                            .toArray();
+            double[] values = transactions.stream()
+                            .mapToDouble(t -> getTransactionQuote(t).getAmount() / Values.Quote.divider()).toArray();
 
             @SuppressWarnings("unchecked")
             ILineSeries<Integer> border = (ILineSeries<Integer>) chart.getSeriesSet().createSeries(SeriesType.LINE,
@@ -2022,8 +2030,9 @@ public class SecuritiesChart
 
         Quote purchasePricePerShare = r.get().getCostPerSharesHeld(costMethod, TaxesAndFees.NOT_INCLUDED);
 
-        return purchasePricePerShare.isZero() ? Optional.empty()
-                        : Optional.of(purchasePricePerShare.getAmount() / Values.Quote.divider());
+        double multiplier = security.getMultiplier(date);
+        return purchasePricePerShare.isZero() || multiplier == 0d ? Optional.empty()
+                        : Optional.of(purchasePricePerShare.getAmount() / Values.Quote.divider() / multiplier);
     }
 
     private static class MessagePainter implements PaintListener, DisposeListener
