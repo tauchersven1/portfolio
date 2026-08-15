@@ -1,0 +1,106 @@
+name: Transaction Multiplier Fix
+
+on:
+  push:
+    branches:
+      - agent/transaction-multiplier-fix
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Apply multiplier patch
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Expected text not found in {path}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # 1) Before the first dated multiplier use the oldest known multiplier.
+          replace_once(
+              'name.abuchen.portfolio/src/name/abuchen/portfolio/model/Security.java',
+              '''        else if (index == -1)\n            return SecurityMultiplier.of(requestedDate, 1.0);''',
+              '''        else if (index == -1)\n            return multipliers.get(0);''')
+
+          # 2) Transaction overview: multiplier directly after quote.
+          viewer = Path('name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/TransactionsViewer.java')
+          text = viewer.read_text(encoding='utf-8')
+          marker = '''        support.addColumn(column);\n\n        column = new Column("5", Messages.ColumnAmount, SWT.RIGHT, 80); //$NON-NLS-1$'''
+          addition = '''        support.addColumn(column);\n\n        column = new Column("multiplier", "Multiplikator", SWT.RIGHT, 80); //$NON-NLS-1$ //$NON-NLS-2$\n        column.setLabelProvider(new TransactionLabelProvider(t -> {\n            Security security = t.getSecurity();\n            return security != null && t.getDateTime() != null\n                            ? Double.toString(security.getMultiplier(t.getDateTime().toLocalDate()))\n                            : null;\n        }));\n        ColumnViewerSorter.create(e -> {\n            Transaction tx = ((TransactionPair<?>) e).getTransaction();\n            Security security = tx.getSecurity();\n            return security != null && tx.getDateTime() != null\n                            ? security.getMultiplier(tx.getDateTime().toLocalDate())\n                            : 1.0;\n        }).attachTo(column);\n        support.addColumn(column);\n\n        column = new Column("5", Messages.ColumnAmount, SWT.RIGHT, 80); //$NON-NLS-1$'''
+          if marker not in text:
+              raise SystemExit('TransactionsViewer insertion point not found')
+          viewer.write_text(text.replace(marker, addition, 1), encoding='utf-8')
+
+          # 3) Dedicated regression tests for lookup semantics.
+          test = Path('name.abuchen.portfolio.tests/src/name/abuchen/portfolio/model/SecurityMultiplierLookupTest.java')
+          test.write_text('''package name.abuchen.portfolio.model;\n\nimport static org.hamcrest.MatcherAssert.assertThat;\nimport static org.hamcrest.Matchers.is;\n\nimport java.time.LocalDate;\n\nimport org.junit.Test;\n\n@SuppressWarnings("nls")\npublic class SecurityMultiplierLookupTest\n{\n    @Test\n    public void testBeforeFirstMultiplierUsesOldestValue()\n    {\n        Security security = securityWithHistory();\n        assertThat(security.getMultiplier(LocalDate.parse("2025-12-31")), is(10.0));\n    }\n\n    @Test\n    public void testBetweenMultiplierEntriesUsesLatestKnownValue()\n    {\n        Security security = securityWithHistory();\n        assertThat(security.getMultiplier(LocalDate.parse("2026-06-30")), is(10.0));\n    }\n\n    @Test\n    public void testAfterLastMultiplierUsesLatestValue()\n    {\n        Security security = securityWithHistory();\n        assertThat(security.getMultiplier(LocalDate.parse("2027-01-01")), is(20.0));\n    }\n\n    @Test\n    public void testEmptyHistoryDefaultsToOne()\n    {\n        Security security = new Security();\n        assertThat(security.getMultiplier(LocalDate.parse("2026-01-01")), is(1.0));\n    }\n\n    private Security securityWithHistory()\n    {\n        Security security = new Security();\n        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), 10.0));\n        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-07-01"), 20.0));\n        return security;\n    }\n}\n''', encoding='utf-8')
+          '@ | python -
+
+      - name: Set up Zulu JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: 21
+          distribution: zulu
+
+      - name: Set up Maven 3.9.16
+        uses: stCarolas/setup-maven@v5
+        with:
+          maven-version: 3.9.16
+
+      - name: Full build and tests
+        shell: pwsh
+        run: |
+          mvn verify --batch-mode --file portfolio-app/pom.xml 2>&1 | Tee-Object -FilePath maven-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Commit verified patch
+        if: success()
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add name.abuchen.portfolio/src/name/abuchen/portfolio/model/Security.java
+          git add name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/TransactionsViewer.java
+          git add name.abuchen.portfolio.tests/src/name/abuchen/portfolio/model/SecurityMultiplierLookupTest.java
+          git commit -m "Fix transaction multiplier lookup and display"
+          git push origin HEAD:agent/transaction-multiplier-fix
+
+      - name: Bundle Windows Java runtime
+        if: success()
+        shell: pwsh
+        run: |
+          $product = 'portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio'
+          $jre = Join-Path $product 'jre'
+          New-Item -ItemType Directory -Force -Path $jre | Out-Null
+          Copy-Item -Path (Join-Path $env:JAVA_HOME '*') -Destination $jre -Recurse -Force
+
+      - name: Upload Windows x86_64 build
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: PortfolioPerformance-Windows-x86_64-${{ github.run_number }}
+          path: portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: transaction-multiplier-build-log
+          path: maven-build.log
+          if-no-files-found: warn
+          retention-days: 7
