@@ -1,0 +1,126 @@
+name: Transaction Multiplier Chart Fix
+
+on:
+  push:
+    branches:
+      - agent/transaction-multiplier-fix
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Apply chart multiplier patch
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Expected text not found in {path}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # Transaction quote display: the monetary gross value contains the multiplier,
+          # while a quoted price must be expressed per underlying quoted unit.
+          path = 'name.abuchen.portfolio/src/name/abuchen/portfolio/model/PortfolioTransaction.java'
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          old = '''                        .divide(BigDecimal.valueOf(getShares()), Values.MC) //\n                        .setScale(0, RoundingMode.HALF_EVEN).longValue();'''
+          new = '''                        .divide(BigDecimal.valueOf(getShares()), Values.MC) //\n                        .divide(getTransactionMultiplier(), Values.MC) //\n                        .setScale(0, RoundingMode.HALF_EVEN).longValue();'''
+          if text.count(old) != 2:
+              raise SystemExit(f'Expected two gross-price calculations in {path}, found {text.count(old)}')
+          text = text.replace(old, new)
+
+          marker = '''    /**\n     * Returns the gross price per share, i.e. the gross value divided by the\n     * number of shares bought or sold. The quote uses the currency of the\n     * transaction.\n     */\n    public Quote getGrossPricePerShare()'''
+          replacement = '''    private BigDecimal getTransactionMultiplier()\n    {\n        if (getSecurity() == null || getDateTime() == null)\n            return BigDecimal.ONE;\n\n        double multiplier = getSecurity().getMultiplier(getDateTime().toLocalDate());\n        return multiplier > 0d ? BigDecimal.valueOf(multiplier) : BigDecimal.ONE;\n    }\n\n    /**\n     * Returns the gross price per share, i.e. the gross value divided by the\n     * number of shares bought or sold and by the security multiplier effective\n     * on the transaction date. The quote uses the currency of the transaction.\n     */\n    public Quote getGrossPricePerShare()'''
+          if marker not in text:
+              raise SystemExit('PortfolioTransaction insertion point not found')
+          p.write_text(text.replace(marker, replacement, 1), encoding='utf-8')
+
+          # Chart purchase price: cost per held share is a monetary contract value.
+          # Convert it back to the quoted price scale using the multiplier valid
+          # at the chart date so it is comparable with SecurityPrice history.
+          replace_once(
+              'name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/SecuritiesChart.java',
+              '''        Quote purchasePricePerShare = r.get().getCostPerSharesHeld(costMethod, TaxesAndFees.NOT_INCLUDED);\n\n        return purchasePricePerShare.isZero() ? Optional.empty()\n                        : Optional.of(purchasePricePerShare.getAmount() / Values.Quote.divider());''',
+              '''        Quote purchasePricePerShare = r.get().getCostPerSharesHeld(costMethod, TaxesAndFees.NOT_INCLUDED);\n        double multiplier = security.getMultiplier(date);\n        if (multiplier <= 0d)\n            multiplier = 1d;\n\n        return purchasePricePerShare.isZero() ? Optional.empty()\n                        : Optional.of(purchasePricePerShare.getAmount() / Values.Quote.divider() / multiplier);''')
+
+          # Regression test: monetary contract value of 4,770 with multiplier 100
+          # must be displayed as a quote of 47.70.
+          test_path = 'name.abuchen.portfolio.tests/src/name/abuchen/portfolio/model/PortfolioTransactionTest.java'
+          p = Path(test_path)
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('''import java.math.BigDecimal;\nimport java.time.LocalDateTime;''',
+                              '''import java.math.BigDecimal;\nimport java.time.LocalDate;\nimport java.time.LocalDateTime;''', 1)
+          marker = '''    @Test\n    public void testGrossPricePerShareWithCurrencyConversion()'''
+          addition = '''    @Test\n    public void testGrossPricePerShareWithSecurityMultiplier()\n    {\n        Security security = new Security();\n        security.setCurrencyCode(CurrencyUnit.USD);\n        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), 100.0)); //$NON-NLS-1$\n\n        PortfolioTransaction tx = new PortfolioTransaction();\n        tx.setDateTime(LocalDateTime.parse("2026-06-01T00:00")); //$NON-NLS-1$\n        tx.setSecurity(security);\n        tx.setMonetaryAmount(Money.of(CurrencyUnit.USD, Values.Amount.factorize(4770.00)));\n        tx.setShares(Values.Share.factorize(1));\n        tx.setType(PortfolioTransaction.Type.BUY);\n\n        assertThat(tx.getGrossPricePerShare(),\n                        is(Quote.of(CurrencyUnit.USD, Values.Quote.factorize(47.70))));\n    }\n\n    @Test\n    public void testGrossPricePerShareWithCurrencyConversion()'''
+          if marker not in text:
+              raise SystemExit('PortfolioTransactionTest insertion point not found')
+          p.write_text(text.replace(marker, addition, 1), encoding='utf-8')
+          '@ | python -
+
+      - name: Set up Zulu JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: 21
+          distribution: zulu
+
+      - name: Set up Maven 3.9.16
+        uses: stCarolas/setup-maven@v5
+        with:
+          maven-version: 3.9.16
+
+      - name: Full build and tests
+        shell: pwsh
+        run: |
+          mvn verify --batch-mode --file portfolio-app/pom.xml 2>&1 | Tee-Object -FilePath maven-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Commit verified patch and remove helper workflow
+        if: success()
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add name.abuchen.portfolio/src/name/abuchen/portfolio/model/PortfolioTransaction.java
+          git add name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/SecuritiesChart.java
+          git add name.abuchen.portfolio.tests/src/name/abuchen/portfolio/model/PortfolioTransactionTest.java
+          git rm .github/workflows/transaction-multiplier-chart-fix.yml
+          git commit -m "Fix multiplier quote scaling in security chart"
+          git push origin HEAD:agent/transaction-multiplier-fix
+
+      - name: Bundle Windows Java runtime
+        if: success()
+        shell: pwsh
+        run: |
+          $product = 'portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio'
+          $jre = Join-Path $product 'jre'
+          New-Item -ItemType Directory -Force -Path $jre | Out-Null
+          Copy-Item -Path (Join-Path $env:JAVA_HOME '*') -Destination $jre -Recurse -Force
+
+      - name: Upload Windows x86_64 build
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: PortfolioPerformance-Windows-x86_64-chart-fix-${{ github.run_number }}
+          path: portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: transaction-multiplier-chart-fix-log
+          path: maven-build.log
+          if-no-files-found: warn
+          retention-days: 7
