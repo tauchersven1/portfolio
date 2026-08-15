@@ -1,0 +1,37 @@
+name: Fix derivative column registration
+
+on:
+  push:
+    branches:
+      - agent/derivatives-three-fixes-staging
+    paths:
+      - .github/workflows/fix-derivative-column-registration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/derivatives-three-fixes-staging
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Apply registration fix
+        run: python .github/scripts/fix_derivative_column_registration.py
+
+      - name: Commit cleaned patch
+        run: |
+          git config user.name "OpenAI"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/scripts/fix_derivative_column_registration.py .github/workflows/fix-derivative-column-registration.yml
+          git add name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/StatementOfAssetsViewer.java
+          git add name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/StatementOfAssetsView.java
+          git commit -m "Register derivative columns before restoring layout"
+          git push origin HEAD:agent/derivatives-three-fixes-staging
