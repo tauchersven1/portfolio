@@ -29,13 +29,19 @@ jobs:
                   raise SystemExit(f'Expected text not found in {path}')
               p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-          # 1) Before the first dated multiplier use the oldest known multiplier.
+          # Security lookup: before first historical entry use oldest value.
           replace_once(
               'name.abuchen.portfolio/src/name/abuchen/portfolio/model/Security.java',
               '''        else if (index == -1)\n            return SecurityMultiplier.of(requestedDate, 1.0);''',
               '''        else if (index == -1)\n            return multipliers.get(0);''')
 
-          # 2) Transaction overview: multiplier directly after quote.
+          # Existing persistence tests must reflect the intentional lookup semantics.
+          replace_once(
+              'name.abuchen.portfolio.tests/src/name/abuchen/portfolio/model/SecurityMultiplierPersistenceTest.java',
+              '''        assertThat(security.getMultiplier(LocalDate.parse("2025-12-31")), is(1.0));''',
+              '''        assertThat(security.getMultiplier(LocalDate.parse("2025-12-31")), is(1000.0));''')
+
+          # Transaction overview: multiplier directly after quote.
           viewer = Path('name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/TransactionsViewer.java')
           text = viewer.read_text(encoding='utf-8')
           marker = '''        support.addColumn(column);\n\n        column = new Column("5", Messages.ColumnAmount, SWT.RIGHT, 80); //$NON-NLS-1$'''
@@ -44,9 +50,31 @@ jobs:
               raise SystemExit('TransactionsViewer insertion point not found')
           viewer.write_text(text.replace(marker, addition, 1), encoding='utf-8')
 
-          # 3) Dedicated regression tests for lookup semantics.
-          test = Path('name.abuchen.portfolio.tests/src/name/abuchen/portfolio/model/SecurityMultiplierLookupTest.java')
-          test.write_text('''package name.abuchen.portfolio.model;\n\nimport static org.hamcrest.MatcherAssert.assertThat;\nimport static org.hamcrest.Matchers.is;\n\nimport java.time.LocalDate;\n\nimport org.junit.Test;\n\n@SuppressWarnings("nls")\npublic class SecurityMultiplierLookupTest\n{\n    @Test\n    public void testBeforeFirstMultiplierUsesOldestValue()\n    {\n        Security security = securityWithHistory();\n        assertThat(security.getMultiplier(LocalDate.parse("2025-12-31")), is(10.0));\n    }\n\n    @Test\n    public void testBetweenMultiplierEntriesUsesLatestKnownValue()\n    {\n        Security security = securityWithHistory();\n        assertThat(security.getMultiplier(LocalDate.parse("2026-06-30")), is(10.0));\n    }\n\n    @Test\n    public void testAfterLastMultiplierUsesLatestValue()\n    {\n        Security security = securityWithHistory();\n        assertThat(security.getMultiplier(LocalDate.parse("2027-01-01")), is(20.0));\n    }\n\n    @Test\n    public void testEmptyHistoryDefaultsToOne()\n    {\n        Security security = new Security();\n        assertThat(security.getMultiplier(LocalDate.parse("2026-01-01")), is(1.0));\n    }\n\n    private Security securityWithHistory()\n    {\n        Security security = new Security();\n        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), 10.0));\n        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-07-01"), 20.0));\n        return security;\n    }\n}\n''', encoding='utf-8')
+          # Stable CSV field code appended to preserve existing saved configurations.
+          replace_once(
+              'name.abuchen.portfolio/src/name/abuchen/portfolio/datatransfer/csv/FieldCode.java',
+              '''    public static final String PORTFOLIO_2ND = "portfolio2nd";\n}''',
+              '''    public static final String PORTFOLIO_2ND = "portfolio2nd";\n    public static final String MULTIPLIER = "multiplier";\n}''')
+
+          # CSV multiplier: explicit value wins by creating/replacing a dated security multiplier.
+          csv = Path('name.abuchen.portfolio/src/name/abuchen/portfolio/datatransfer/csv/CSVPortfolioTransactionExtractor.java')
+          text = csv.read_text(encoding='utf-8')
+          text = text.replace(
+              '''import name.abuchen.portfolio.model.Security;\nimport name.abuchen.portfolio.model.Transaction.Unit;''',
+              '''import name.abuchen.portfolio.model.Security;\nimport name.abuchen.portfolio.model.SecurityMultiplier;\nimport name.abuchen.portfolio.model.Transaction.Unit;''', 1)
+          text = text.replace(
+              '''        fields.add(new Field(FieldCode.PORTFOLIO_2ND, Messages.CSVColumn_PortfolioName2nd).setOptional(true));\n    }''',
+              '''        fields.add(new Field(FieldCode.PORTFOLIO_2ND, Messages.CSVColumn_PortfolioName2nd).setOptional(true));\n        fields.add(new AmountField(FieldCode.MULTIPLIER, "Multiplikator").setOptional(true)); //$NON-NLS-1$\n    }''', 1)
+          text = text.replace(
+              '''        var date = getDate(FieldCode.DATE, FieldCode.TIME, rawValues, field2column);\n        if (date == null)\n            throw new ParseException(MessageFormat.format(Messages.CSVImportMissingField, Messages.CSVColumn_Date), 0);\n\n        var shares = getShares(FieldCode.SHARES, rawValues, field2column);''',
+              '''        var date = getDate(FieldCode.DATE, FieldCode.TIME, rawValues, field2column);\n        if (date == null)\n            throw new ParseException(MessageFormat.format(Messages.CSVImportMissingField, Messages.CSVColumn_Date), 0);\n\n        var explicitMultiplier = getBigDecimal(FieldCode.MULTIPLIER, rawValues, field2column);\n        if (explicitMultiplier != null)\n            security.addMultiplier(SecurityMultiplier.of(date.toLocalDate(), explicitMultiplier.doubleValue()));\n\n        var shares = getShares(FieldCode.SHARES, rawValues, field2column);''', 1)
+          csv.write_text(text, encoding='utf-8')
+
+          # Lookup regression tests.
+          Path('name.abuchen.portfolio.tests/src/name/abuchen/portfolio/model/SecurityMultiplierLookupTest.java').write_text('''package name.abuchen.portfolio.model;\n\nimport static org.hamcrest.MatcherAssert.assertThat;\nimport static org.hamcrest.Matchers.is;\n\nimport java.time.LocalDate;\n\nimport org.junit.Test;\n\n@SuppressWarnings("nls")\npublic class SecurityMultiplierLookupTest\n{\n    @Test\n    public void testBeforeFirstMultiplierUsesOldestValue()\n    {\n        Security security = securityWithHistory();\n        assertThat(security.getMultiplier(LocalDate.parse("2025-12-31")), is(10.0));\n    }\n\n    @Test\n    public void testBetweenMultiplierEntriesUsesLatestKnownValue()\n    {\n        Security security = securityWithHistory();\n        assertThat(security.getMultiplier(LocalDate.parse("2026-06-30")), is(10.0));\n    }\n\n    @Test\n    public void testAfterLastMultiplierUsesLatestValue()\n    {\n        Security security = securityWithHistory();\n        assertThat(security.getMultiplier(LocalDate.parse("2027-01-01")), is(20.0));\n    }\n\n    @Test\n    public void testEmptyHistoryDefaultsToOne()\n    {\n        Security security = new Security();\n        assertThat(security.getMultiplier(LocalDate.parse("2026-01-01")), is(1.0));\n    }\n\n    private Security securityWithHistory()\n    {\n        Security security = new Security();\n        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), 10.0));\n        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-07-01"), 20.0));\n        return security;\n    }\n}\n''', encoding='utf-8')
+
+          # CSV regression tests: explicit override, master-data fallback, empty-history fallback.
+          Path('name.abuchen.portfolio.tests/src/name/abuchen/portfolio/datatransfer/csv/CSVPortfolioTransactionMultiplierTest.java').write_text('''package name.abuchen.portfolio.datatransfer.csv;\n\nimport static name.abuchen.portfolio.datatransfer.csv.CSVExtractorTestUtil.buildField2Column;\nimport static org.hamcrest.CoreMatchers.is;\nimport static org.hamcrest.MatcherAssert.assertThat;\nimport static org.hamcrest.collection.IsEmptyCollection.empty;\n\nimport java.time.LocalDate;\nimport java.util.ArrayList;\nimport java.util.Arrays;\nimport java.util.List;\n\nimport org.junit.Test;\n\nimport name.abuchen.portfolio.datatransfer.Extractor.Item;\nimport name.abuchen.portfolio.model.Client;\nimport name.abuchen.portfolio.model.Security;\nimport name.abuchen.portfolio.model.SecurityMultiplier;\n\n@SuppressWarnings("nls")\npublic class CSVPortfolioTransactionMultiplierTest\n{\n    @Test\n    public void testExplicitCsvMultiplierOverridesMasterData()\n    {\n        Security security = securityWithMultiplier(10.0);\n        importTransaction(security, "25");\n        assertThat(security.getMultiplier(LocalDate.parse("2026-06-01")), is(25.0));\n    }\n\n    @Test\n    public void testMasterDataMultiplierUsedWhenCsvMultiplierMissing()\n    {\n        Security security = securityWithMultiplier(10.0);\n        importTransaction(security, null);\n        assertThat(security.getMultiplier(LocalDate.parse("2026-06-01")), is(10.0));\n    }\n\n    @Test\n    public void testOneUsedWhenCsvAndMasterDataMultiplierMissing()\n    {\n        Security security = new Security();\n        security.setTickerSymbol("SAP.DE");\n        importTransaction(security, null);\n        assertThat(security.getMultiplier(LocalDate.parse("2026-06-01")), is(1.0));\n    }\n\n    private Security securityWithMultiplier(double multiplier)\n    {\n        Security security = new Security();\n        security.setTickerSymbol("SAP.DE");\n        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), multiplier));\n        return security;\n    }\n\n    private void importTransaction(Security security, String multiplier)\n    {\n        Client client = new Client();\n        client.addSecurity(security);\n        CSVExtractor extractor = new CSVPortfolioTransactionExtractor(client);\n        List<Exception> errors = new ArrayList<>();\n        String[] row = new String[] { "2026-06-01", "", "", "SAP.DE", "", "SAP", "100", "EUR", "", "",\n                        "", "", "", "1", "BUY", "", "", "", "", multiplier };\n        List<Item> results = extractor.extract(0, Arrays.<String[]>asList(row), buildField2Column(extractor), errors);\n        assertThat(errors, empty());\n        assertThat(results.size(), is(1));\n    }\n}\n''', encoding='utf-8')
           '@ | python -
 
       - name: Set up Zulu JDK 21
@@ -66,16 +94,21 @@ jobs:
           mvn verify --batch-mode --file portfolio-app/pom.xml 2>&1 | Tee-Object -FilePath maven-build.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Commit verified patch
+      - name: Commit verified patch and remove helper workflow
         if: success()
         shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add name.abuchen.portfolio/src/name/abuchen/portfolio/model/Security.java
+          git add name.abuchen.portfolio/src/name/abuchen/portfolio/datatransfer/csv/FieldCode.java
+          git add name.abuchen.portfolio/src/name/abuchen/portfolio/datatransfer/csv/CSVPortfolioTransactionExtractor.java
           git add name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/TransactionsViewer.java
           git add name.abuchen.portfolio.tests/src/name/abuchen/portfolio/model/SecurityMultiplierLookupTest.java
-          git commit -m "Fix transaction multiplier lookup and display"
+          git add name.abuchen.portfolio.tests/src/name/abuchen/portfolio/model/SecurityMultiplierPersistenceTest.java
+          git add name.abuchen.portfolio.tests/src/name/abuchen/portfolio/datatransfer/csv/CSVPortfolioTransactionMultiplierTest.java
+          git rm .github/workflows/transaction-multiplier-fix.yml
+          git commit -m "Fix transaction multiplier handling and CSV import"
           git push origin HEAD:agent/transaction-multiplier-fix
 
       - name: Bundle Windows Java runtime
