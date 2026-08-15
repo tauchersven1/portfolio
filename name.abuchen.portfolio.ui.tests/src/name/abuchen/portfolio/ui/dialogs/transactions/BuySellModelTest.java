@@ -125,7 +125,7 @@ public class BuySellModelTest
 
         model.setShares(-100L * Values.Share.factor());
         model.setQuote(BigDecimal.valueOf(5.0));
-        assertThat(model.getCalculationStatus(), is(ValidationStatus.error(Messages.MsgIncorrectSubTotal)));
+        assertThat(model.getCalculationStatus(), is(ValidationStatus.error(Messages.MsgIncorrectConvertedSubTotal)));
 
         model.setShares(100L * Values.Share.factor());
         model.setQuote(BigDecimal.valueOf(-5.0));
