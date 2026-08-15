@@ -411,7 +411,7 @@ public final class Security implements Attributable, InvestmentVehicle
         if (index >= 0)
             return multipliers.get(index);
         else if (index == -1)
-            return SecurityMultiplier.of(requestedDate, 1.0);
+            return multipliers.get(0);
         else
             return multipliers.get(-index - 2);
     }

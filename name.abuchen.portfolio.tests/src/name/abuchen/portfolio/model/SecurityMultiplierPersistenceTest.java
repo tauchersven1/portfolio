@@ -71,7 +71,7 @@ public class SecurityMultiplierPersistenceTest
 
         Security security = client.getSecurities().get(0);
         assertThat(security.getMultipliers().size(), is(2));
-        assertThat(security.getMultiplier(LocalDate.parse("2025-12-31")), is(1.0));
+        assertThat(security.getMultiplier(LocalDate.parse("2025-12-31")), is(1000.0));
         assertThat(security.getMultiplier(LocalDate.parse("2026-05-01")), is(1000.0));
         assertThat(security.getMultiplier(LocalDate.parse("2026-08-01")), is(1125.25));
     }
