@@ -316,6 +316,7 @@ public class StatementOfAssetsViewer
 
     private AbstractFinanceView owner;
     private ShowHideColumnHelper support;
+    private final List<Column> additionalColumns = new ArrayList<>();
 
     private final Client client;
     private Taxonomy taxonomy;
@@ -336,6 +337,14 @@ public class StatementOfAssetsViewer
 
         if (assets != null)
             assets.refresh();
+    }
+
+    public void addColumn(Column column)
+    {
+        if (support == null)
+            additionalColumns.add(column);
+        else
+            support.addColumn(column);
     }
 
     public Control createControl(Composite parent, boolean isConfigurable)
@@ -634,6 +643,10 @@ public class StatementOfAssetsViewer
                         owner.getPart().getReportingPeriods().stream().collect(toMutableList()));
         column.getSorter().wrap(ElementComparator::new);
         support.addColumn(column);
+
+        // Register view-specific columns before restoring the persisted configuration
+        // so their stable IDs can be resolved in a single pass.
+        additionalColumns.forEach(support::addColumn);
 
         support.createColumns(isConfigurable);
 

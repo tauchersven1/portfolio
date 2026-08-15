@@ -139,22 +139,17 @@ public class StatementOfAssetsView extends AbstractFinanceView
     protected Control createBody(Composite parent)
     {
         assetViewer = make(StatementOfAssetsViewer.class);
-        Control control = assetViewer.createControl(parent, true);
 
         ExposureColumn exposureColumn = new ExposureColumn(getClient(), () -> currentSnapshotDate,
                         () -> currentConverter, () -> null);
         exposureColumn.setGroupLabel(DERIVATIVES_GROUP);
         exposureColumn.setVisible(true);
-        assetViewer.getColumnHelper().addColumn(exposureColumn);
+        assetViewer.addColumn(exposureColumn);
 
         addDerivativeContractColumns();
-        assetViewer.getColumnHelper().addColumn(createPutCallColumn());
+        assetViewer.addColumn(createPutCallColumn());
 
-        // createControl() restores the column configuration before the custom derivative
-        // columns are registered. Re-apply it now so persisted derivative columns are
-        // resolved by their stable IDs as well.
-        assetViewer.getColumnHelper().createColumns();
-
+        Control control = assetViewer.createControl(parent, true);
         assetViewer.setToolBarManager(getViewToolBarManager());
 
         updateTitle(getDefaultTitle());
@@ -185,29 +180,29 @@ public class StatementOfAssetsView extends AbstractFinanceView
 
     private void addDerivativeContractColumns()
     {
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeUnderlying", "Underlying",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeUnderlying", "Underlying",
                         "underlying", 140)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeContractSymbol",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeContractSymbol",
                         "Contract / Trading Symbol", "contractSymbol", 150)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeExchange", "Exchange",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeExchange", "Exchange",
                         "exchange", 90)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeContractMonth",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeContractMonth",
                         "Contract Month", "contractMonth", 100)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeFirstTradingDay",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeFirstTradingDay",
                         "First Trading Day", "firstTradingDay", 110)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeLastTradingDay",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeLastTradingDay",
                         "Last Trading Day", "lastTradingDay", 110)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeExpirationDate",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeExpirationDate",
                         "Expiration Date", "expirationDate", 110)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeSettlementDate",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeSettlementDate",
                         "Settlement Date", "settlementDate", 110)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeFirstNoticeDay",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeFirstNoticeDay",
                         "First Notice Day", "firstNoticeDay", 110)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeSettlementType",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeSettlementType",
                         "Settlement", "settlementType", 90)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeContractSize",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeContractSize",
                         "Contract Size", "contractSize", 100)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        assetViewer.getColumnHelper().addColumn(createDerivativePropertyColumn("derivativeTickSize", "Tick Size",
+        assetViewer.addColumn(createDerivativePropertyColumn("derivativeTickSize", "Tick Size",
                         "tickSize", 90)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
     }
 
