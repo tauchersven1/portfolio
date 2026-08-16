@@ -24,6 +24,7 @@ import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.CurrencyConverterImpl;
 import name.abuchen.portfolio.money.CurrencyUnit;
 import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
+import name.abuchen.portfolio.snapshot.ExposureCalculator.ExposureType;
 import name.abuchen.portfolio.ui.Images;
 import name.abuchen.portfolio.ui.Messages;
 import name.abuchen.portfolio.ui.UIConstants;
@@ -141,11 +142,18 @@ public class StatementOfAssetsView extends AbstractFinanceView
         assetViewer = make(StatementOfAssetsViewer.class);
         Control control = assetViewer.createControl(parent, true);
 
-        ExposureColumn exposureColumn = new ExposureColumn(getClient(), () -> currentSnapshotDate,
+        ExposureColumn nominalExposureColumn = new ExposureColumn(getClient(), () -> currentSnapshotDate,
                         () -> currentConverter, () -> null);
-        exposureColumn.setGroupLabel(DERIVATIVES_GROUP);
-        exposureColumn.setVisible(true);
-        assetViewer.getColumnHelper().addColumn(exposureColumn);
+        nominalExposureColumn.setGroupLabel(DERIVATIVES_GROUP);
+        nominalExposureColumn.setVisible(true);
+        assetViewer.getColumnHelper().addColumn(nominalExposureColumn);
+
+        ExposureColumn deltaAdjustedExposureColumn = new ExposureColumn(getClient(), () -> currentSnapshotDate,
+                        () -> currentConverter, () -> null, ExposureType.DELTA_ADJUSTED,
+                        "derivativeExposureDeltaAdjusted", "Exposure deltadj."); //$NON-NLS-1$ //$NON-NLS-2$
+        deltaAdjustedExposureColumn.setGroupLabel(DERIVATIVES_GROUP);
+        deltaAdjustedExposureColumn.setVisible(true);
+        assetViewer.getColumnHelper().addColumn(deltaAdjustedExposureColumn);
 
         addDerivativeContractColumns();
         assetViewer.getColumnHelper().addColumn(createPutCallColumn());
