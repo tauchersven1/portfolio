@@ -22,6 +22,9 @@ public final class ExposureCalculator
 
     public static final String OPTION_PRODUCT_TYPE = "optionProductType"; //$NON-NLS-1$
     public static final String KNOCK_OUT_CERTIFICATE = "KNOCK_OUT_CERTIFICATE"; //$NON-NLS-1$
+    private static final String PUT_CALL = "putCall"; //$NON-NLS-1$
+    private static final String PUT = "PUT"; //$NON-NLS-1$
+    private static final String CALL = "CALL"; //$NON-NLS-1$
 
     private ExposureCalculator()
     {
@@ -79,11 +82,26 @@ public final class ExposureCalculator
 
         double factor = security.getMultiplier(date);
         if (exposureType == ExposureType.DELTA_ADJUSTED)
-            factor *= SecurityDelta.getDelta(security, date);
+            factor *= directionalDelta(security, derivativeType, date);
 
         Money rawExposure = DerivativePositionCalculator.valueOf(position.getShares(), referenceValue, factor,
                         exposureCurrency);
         return converter.convert(date, rawExposure);
+    }
+
+    private static double directionalDelta(Security security, String derivativeType, LocalDate date)
+    {
+        double delta = SecurityDelta.getDelta(security, date);
+        if (!DerivativePositionCalculator.OPTION.equals(derivativeType))
+            return delta;
+
+        String putCall = security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, PUT_CALL).orElse(null);
+        if (PUT.equals(putCall))
+            return -Math.abs(delta);
+        if (CALL.equals(putCall))
+            return Math.abs(delta);
+
+        return delta;
     }
 
     public static boolean isKnockoutCertificate(Security security)
