@@ -47,6 +47,37 @@ public class ExposureCalculatorTest
     }
 
     @Test
+    public void testDirectionalOptionExposureForLongAndShortCallsAndPuts()
+    {
+        Client client = new Client();
+        TestCurrencyConverter converter = new TestCurrencyConverter();
+
+        Security call = option("Call", "CALL");
+        Security put = option("Put", "PUT");
+        client.addSecurity(call);
+        client.addSecurity(put);
+
+        Money longCall = ExposureCalculator.calculate(client,
+                        position(call, 2, 4.0, PortfolioTransaction.Type.BUY), DATE, converter,
+                        ExposureType.DELTA_ADJUSTED);
+        Money shortCall = ExposureCalculator.calculate(client,
+                        position(call, 2, 4.0, PortfolioTransaction.Type.SELL), DATE, converter,
+                        ExposureType.DELTA_ADJUSTED);
+        Money longPut = ExposureCalculator.calculate(client,
+                        position(put, 2, 4.0, PortfolioTransaction.Type.BUY), DATE, converter,
+                        ExposureType.DELTA_ADJUSTED);
+        Money shortPut = ExposureCalculator.calculate(client,
+                        position(put, 2, 4.0, PortfolioTransaction.Type.SELL), DATE, converter,
+                        ExposureType.DELTA_ADJUSTED);
+
+        long expected = Values.Amount.factorize(20000.0);
+        assertThat(longCall, is(Money.of("EUR", expected)));
+        assertThat(shortCall, is(Money.of("EUR", -expected)));
+        assertThat(longPut, is(Money.of("EUR", -expected)));
+        assertThat(shortPut, is(Money.of("EUR", expected)));
+    }
+
+    @Test
     public void testKnockoutCertificateUsesUnderlyingAsExposureReference()
     {
         Client client = new Client();
@@ -109,16 +140,32 @@ public class ExposureCalculatorTest
         assertThat(marketValue, is(Money.of("EUR", Values.Amount.factorize(1000.0))));
     }
 
+    private Security option(String name, String putCall)
+    {
+        Security option = new Security(name, "EUR");
+        option.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "type", "OPTION");
+        option.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "putCall", putCall);
+        option.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "strike", "200");
+        option.addMultiplier(SecurityMultiplier.of(LocalDate.of(2026, 1, 1), 100.0));
+        SecurityDelta.replaceAll(option, List.of(SecurityDelta.of(LocalDate.of(2026, 1, 1), 0.5)));
+        return option;
+    }
+
     private SecurityPosition position(Security security, long quantity, double price)
     {
-        PortfolioTransaction buy = new PortfolioTransaction(PortfolioTransaction.Type.BUY);
-        buy.setDateTime(LocalDateTime.of(2026, 8, 1, 12, 0));
-        buy.setSecurity(security);
-        buy.setCurrencyCode("EUR");
-        buy.setShares(Values.Share.factorize(quantity));
-        buy.setAmount(Values.Amount.factorize(quantity * price));
+        return position(security, quantity, price, PortfolioTransaction.Type.BUY);
+    }
+
+    private SecurityPosition position(Security security, long quantity, double price, PortfolioTransaction.Type type)
+    {
+        PortfolioTransaction transaction = new PortfolioTransaction(type);
+        transaction.setDateTime(LocalDateTime.of(2026, 8, 1, 12, 0));
+        transaction.setSecurity(security);
+        transaction.setCurrencyCode("EUR");
+        transaction.setShares(Values.Share.factorize(quantity));
+        transaction.setAmount(Values.Amount.factorize(quantity * price));
 
         return new SecurityPosition(security, new TestCurrencyConverter(),
-                        new SecurityPrice(DATE, Values.Quote.factorize(price)), List.of(buy));
+                        new SecurityPrice(DATE, Values.Quote.factorize(price)), List.of(transaction));
     }
 }
