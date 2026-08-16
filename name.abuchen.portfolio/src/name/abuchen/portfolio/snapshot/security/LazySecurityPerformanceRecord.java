@@ -168,11 +168,11 @@ public final class LazySecurityPerformanceRecord extends BaseSecurityPerformance
     }
 
     /**
-     * Historical cost basis normalized with the multiplier that was effective
-     * on each transaction date. This basis is used only to derive quote-level
-     * entry prices; the normal monetary cost basis above remains unchanged.
+     * Historical quote-scaled cost basis normalized with the multiplier that
+     * was effective on each transaction date. It is used only for entry-price
+     * display; monetary P&L calculations continue to use {@link #getCostMoney}.
      */
-    private Money getQuoteCostMoney(CostMethod costMethod, TaxesAndFees taxesAndFees)
+    private long getQuoteCost(CostMethod costMethod, TaxesAndFees taxesAndFees)
     {
         return switch (costMethod)
         {
@@ -315,11 +315,12 @@ public final class LazySecurityPerformanceRecord extends BaseSecurityPerformance
 
     public Quote getCostPerSharesHeld(CostMethod costMethod, TaxesAndFees taxesAndFees)
     {
-        var sharesHeldForCostCalculation = costCalculation.get().sharesHeld();
-        Money cost = getQuoteCostMoney(costMethod, taxesAndFees);
+        var costs = costCalculation.get();
+        long quoteCost = getQuoteCost(costMethod, taxesAndFees);
+        String currencyCode = getCostMoney(costMethod, taxesAndFees).getCurrencyCode();
 
-        return Quote.of(cost.getCurrencyCode(), Math.round(cost.getAmount() / (double) sharesHeldForCostCalculation
-                        * Values.Share.factor() * Values.Quote.factorToMoney()));
+        return Quote.of(currencyCode,
+                        Math.round(quoteCost / (double) costs.sharesHeld() * Values.Share.factor()));
     }
 
     public Money getSumOfDividends()
