@@ -1,4 +1,4 @@
-name: Transaction Multiplier Chart Fix
+name: Transaction Multiplier Cost Basis Fix
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply chart multiplier patch
+      - name: Apply historical multiplier cost-basis patch
         shell: pwsh
         run: |
           @'
@@ -26,11 +26,11 @@ jobs:
               p = Path(path)
               text = p.read_text(encoding='utf-8')
               if old not in text:
-                  raise SystemExit(f'Expected text not found in {path}')
+                  raise SystemExit(f'Expected text not found in {path}: {old[:120]!r}')
               p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-          # Transaction quote display: the monetary gross value contains the multiplier,
-          # while a quoted price must be expressed per underlying quoted unit.
+          # Transaction marker/tooltip quote: use the multiplier effective on the
+          # transaction date. This is independent from holdings cost calculation.
           path = 'name.abuchen.portfolio/src/name/abuchen/portfolio/model/PortfolioTransaction.java'
           p = Path(path)
           text = p.read_text(encoding='utf-8')
@@ -46,16 +46,88 @@ jobs:
               raise SystemExit('PortfolioTransaction insertion point not found')
           p.write_text(text.replace(marker, replacement, 1), encoding='utf-8')
 
-          # Chart purchase price: cost per held share is a monetary contract value.
-          # Convert it back to the quoted price scale using the multiplier valid
-          # at the chart date so it is comparable with SecurityPrice history.
-          replace_once(
-              'name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/SecuritiesChart.java',
-              '''        Quote purchasePricePerShare = r.get().getCostPerSharesHeld(costMethod, TaxesAndFees.NOT_INCLUDED);\n\n        return purchasePricePerShare.isZero() ? Optional.empty()\n                        : Optional.of(purchasePricePerShare.getAmount() / Values.Quote.divider());''',
-              '''        Quote purchasePricePerShare = r.get().getCostPerSharesHeld(costMethod, TaxesAndFees.NOT_INCLUDED);\n        double multiplier = security.getMultiplier(date);\n        if (multiplier <= 0d)\n            multiplier = 1d;\n\n        return purchasePricePerShare.isZero() ? Optional.empty()\n                        : Optional.of(purchasePricePerShare.getAmount() / Values.Quote.divider() / multiplier);''')
+          # CostCalculation keeps the existing monetary cost basis untouched and
+          # carries a second, historical multiplier-normalized basis in parallel.
+          path = 'name.abuchen.portfolio/src/name/abuchen/portfolio/snapshot/security/CostCalculation.java'
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
 
-          # Regression test: monetary contract value of 4,770 with multiplier 100
-          # must be displayed as a quote of 47.70.
+          text = text.replace(
+              '''    public record CostCalculationResult(long sharesHeld, Money fifoCost, TrailRecord fifoCostTrail, Money netFifoCost,\n                    Money movingAverageCost, Money netMovingAverageCost, Money fees, Money taxes)''',
+              '''    public record CostCalculationResult(long sharesHeld, Money fifoCost, TrailRecord fifoCostTrail, Money netFifoCost,\n                    Money movingAverageCost, Money netMovingAverageCost, Money fifoQuoteCost, Money netFifoQuoteCost,\n                    Money movingAverageQuoteCost, Money netMovingAverageQuoteCost, Money fees, Money taxes)''', 1)
+
+          text = text.replace(
+              '''        private long grossAmount;\n        private long netAmount;''',
+              '''        private long grossAmount;\n        private long netAmount;\n        private long grossQuoteAmount;\n        private long netQuoteAmount;''', 1)
+
+          text = text.replace(
+              '''        public LineItem(TransactionOwner<?> owner, long shares, long grossAmount, long netAmount, TrailRecord trail)\n        {\n            this.owner = owner;\n            this.shares = shares;\n            this.grossAmount = grossAmount;\n            this.netAmount = netAmount;\n            this.trail = trail;\n            this.originalShares = shares;\n        }''',
+              '''        public LineItem(TransactionOwner<?> owner, long shares, long grossAmount, long netAmount, long grossQuoteAmount,\n                        long netQuoteAmount, TrailRecord trail)\n        {\n            this.owner = owner;\n            this.shares = shares;\n            this.grossAmount = grossAmount;\n            this.netAmount = netAmount;\n            this.grossQuoteAmount = grossQuoteAmount;\n            this.netQuoteAmount = netQuoteAmount;\n            this.trail = trail;\n            this.originalShares = shares;\n        }''', 1)
+
+          text = text.replace(
+              '''    private long movingRelativeCost = 0;\n    private long movingRelativeNetCost = 0;\n    private long heldShares = 0;''',
+              '''    private long movingRelativeCost = 0;\n    private long movingRelativeNetCost = 0;\n    private long movingRelativeQuoteCost = 0;\n    private long movingRelativeNetQuoteCost = 0;\n    private long heldShares = 0;''', 1)
+
+          # Valuation-at-start has no originating transaction lot available. Keep
+          # legacy behavior (multiplier 1) rather than inventing a later multiplier.
+          text = text.replace(
+              '''        fifo.add(new LineItem(item.getOwner(), position.getShares(), amount, amount, trail));''',
+              '''        fifo.add(new LineItem(item.getOwner(), position.getShares(), amount, amount, amount, amount, trail));''', 1)
+          text = text.replace(
+              '''        movingRelativeCost += amount;\n        movingRelativeNetCost += amount;\n        heldShares += position.getShares();''',
+              '''        movingRelativeCost += amount;\n        movingRelativeNetCost += amount;\n        movingRelativeQuoteCost += amount;\n        movingRelativeNetQuoteCost += amount;\n        heldShares += position.getShares();''', 1)
+
+          text = text.replace(
+              '''                long grossAmount = t.getMonetaryAmount(converter).getAmount();\n                long netAmount = t.getGrossValue(converter).getAmount();''',
+              '''                long grossAmount = t.getMonetaryAmount(converter).getAmount();\n                long netAmount = t.getGrossValue(converter).getAmount();\n                long grossQuoteAmount = normalizeByTransactionMultiplier(grossAmount, t);\n                long netQuoteAmount = normalizeByTransactionMultiplier(netAmount, t);''', 1)
+
+          text = text.replace(
+              '''                fifo.add(new LineItem(item.getOwner(), t.getShares(), grossAmount, netAmount, trail));\n                movingRelativeCost += grossAmount;\n                movingRelativeNetCost += netAmount;\n                heldShares += t.getShares();''',
+              '''                fifo.add(new LineItem(item.getOwner(), t.getShares(), grossAmount, netAmount, grossQuoteAmount,\n                                netQuoteAmount, trail));\n                movingRelativeCost += grossAmount;\n                movingRelativeNetCost += netAmount;\n                movingRelativeQuoteCost += grossQuoteAmount;\n                movingRelativeNetQuoteCost += netQuoteAmount;\n                heldShares += t.getShares();''', 1)
+
+          text = text.replace(
+              '''                    movingRelativeCost = 0;\n                    movingRelativeNetCost = 0;\n                    heldShares = 0;''',
+              '''                    movingRelativeCost = 0;\n                    movingRelativeNetCost = 0;\n                    movingRelativeQuoteCost = 0;\n                    movingRelativeNetQuoteCost = 0;\n                    heldShares = 0;''', 1)
+
+          text = text.replace(
+              '''                    movingRelativeCost = Math.round(movingRelativeCost / (double) heldShares * remaining);\n                    movingRelativeNetCost = Math.round(movingRelativeNetCost / (double) heldShares * remaining);\n                    heldShares = remaining;''',
+              '''                    movingRelativeCost = Math.round(movingRelativeCost / (double) heldShares * remaining);\n                    movingRelativeNetCost = Math.round(movingRelativeNetCost / (double) heldShares * remaining);\n                    movingRelativeQuoteCost = Math.round(movingRelativeQuoteCost / (double) heldShares * remaining);\n                    movingRelativeNetQuoteCost = Math.round(movingRelativeNetQuoteCost / (double) heldShares * remaining);\n                    heldShares = remaining;''', 1)
+
+          text = text.replace(
+              '''                    entry.grossAmount -= Math.round(n / (double) entry.shares * entry.grossAmount);\n                    entry.netAmount -= Math.round(n / (double) entry.shares * entry.netAmount);\n                    entry.shares -= n;''',
+              '''                    entry.grossAmount -= Math.round(n / (double) entry.shares * entry.grossAmount);\n                    entry.netAmount -= Math.round(n / (double) entry.shares * entry.netAmount);\n                    entry.grossQuoteAmount -= Math.round(n / (double) entry.shares * entry.grossQuoteAmount);\n                    entry.netQuoteAmount -= Math.round(n / (double) entry.shares * entry.netQuoteAmount);\n                    entry.shares -= n;''', 1)
+
+          text = text.replace(
+              '''                        long transferredGrossAmount = Math.round(n / (double) entry.shares * entry.grossAmount);\n                        long transferredNetAmount = Math.round(n / (double) entry.shares * entry.netAmount);''',
+              '''                        long transferredGrossAmount = Math.round(n / (double) entry.shares * entry.grossAmount);\n                        long transferredNetAmount = Math.round(n / (double) entry.shares * entry.netAmount);\n                        long transferredGrossQuoteAmount = Math.round(n / (double) entry.shares * entry.grossQuoteAmount);\n                        long transferredNetQuoteAmount = Math.round(n / (double) entry.shares * entry.netQuoteAmount);''', 1)
+
+          text = text.replace(
+              '''                                        transferredGrossAmount, //\n                                        transferredNetAmount, //\n                                        entry.trail.fraction''',
+              '''                                        transferredGrossAmount, //\n                                        transferredNetAmount, //\n                                        transferredGrossQuoteAmount, //\n                                        transferredNetQuoteAmount, //\n                                        entry.trail.fraction''', 1)
+
+          text = text.replace(
+              '''                        entry.grossAmount -= transferredGrossAmount;\n                        entry.netAmount -= transferredNetAmount;\n                        entry.shares -= n;''',
+              '''                        entry.grossAmount -= transferredGrossAmount;\n                        entry.netAmount -= transferredNetAmount;\n                        entry.grossQuoteAmount -= transferredGrossQuoteAmount;\n                        entry.netQuoteAmount -= transferredNetQuoteAmount;\n                        entry.shares -= n;''', 1)
+
+          text = text.replace(
+              '''        return new CostCalculationResult(getSharesHeld(), getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),\n                        getFifoCostTrail(), getCost(CostMethod.FIFO, TaxesAndFees.NOT_INCLUDED),\n                        getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),\n                        getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.NOT_INCLUDED), getFees(), getTaxes());''',
+              '''        return new CostCalculationResult(getSharesHeld(), getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),\n                        getFifoCostTrail(), getCost(CostMethod.FIFO, TaxesAndFees.NOT_INCLUDED),\n                        getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),\n                        getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.NOT_INCLUDED),\n                        getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),\n                        getQuoteCost(CostMethod.FIFO, TaxesAndFees.NOT_INCLUDED),\n                        getQuoteCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),\n                        getQuoteCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.NOT_INCLUDED), getFees(), getTaxes());''', 1)
+
+          insertion = '''\n    public Money getQuoteCost(CostMethod method, TaxesAndFees taxesAndFees)\n    {\n        return Money.of(getTermCurrency(), switch (method)\n        {\n            case FIFO -> sumFifoQuote(taxesAndFees);\n            case MOVING_AVERAGE -> taxesAndFees.isIncluded() ? movingRelativeQuoteCost : movingRelativeNetQuoteCost;\n        });\n    }\n\n    private long sumFifoQuote(TaxesAndFees taxesAndFees)\n    {\n        long cost = 0;\n        for (LineItem entry : fifo)\n            cost += taxesAndFees.isIncluded() ? entry.grossQuoteAmount : entry.netQuoteAmount;\n        return cost;\n    }\n\n    private long normalizeByTransactionMultiplier(long amount, PortfolioTransaction transaction)\n    {\n        if (transaction.getSecurity() == null || transaction.getDateTime() == null)\n            return amount;\n\n        double multiplier = transaction.getSecurity().getMultiplier(transaction.getDateTime().toLocalDate());\n        return multiplier > 0d ? Math.round(amount / multiplier) : amount;\n    }\n'''
+          anchor = '''    private long sumFifo(TaxesAndFees taxesAndFees)\n    {'''
+          if anchor not in text:
+              raise SystemExit('CostCalculation insertion point not found')
+          text = text.replace(anchor, insertion + '\n' + anchor, 1)
+          p.write_text(text, encoding='utf-8')
+
+          # A method returning Quote must consume the normalized basis. Monetary
+          # getCost(...) remains untouched for P&L/performance accounting.
+          path = 'name.abuchen.portfolio/src/name/abuchen/portfolio/snapshot/security/LazySecurityPerformanceRecord.java'
+          replace_once(path,
+              '''        Money cost = getCostMoney(costMethod, taxesAndFees);''',
+              '''        Money cost = switch (costMethod)\n        {\n            case FIFO -> taxesAndFees.isIncluded() ? costCalculation.get().fifoQuoteCost()\n                            : costCalculation.get().netFifoQuoteCost();\n            case MOVING_AVERAGE -> taxesAndFees.isIncluded() ? costCalculation.get().movingAverageQuoteCost()\n                            : costCalculation.get().netMovingAverageQuoteCost();\n        };''')
+
+          # Transaction quote regression.
           test_path = 'name.abuchen.portfolio.tests/src/name/abuchen/portfolio/model/PortfolioTransactionTest.java'
           p = Path(test_path)
           text = p.read_text(encoding='utf-8')
@@ -65,6 +137,19 @@ jobs:
           addition = '''    @Test\n    public void testGrossPricePerShareWithSecurityMultiplier()\n    {\n        Security security = new Security();\n        security.setCurrencyCode(CurrencyUnit.USD);\n        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), 100.0)); //$NON-NLS-1$\n\n        PortfolioTransaction tx = new PortfolioTransaction();\n        tx.setDateTime(LocalDateTime.parse("2026-06-01T00:00")); //$NON-NLS-1$\n        tx.setSecurity(security);\n        tx.setMonetaryAmount(Money.of(CurrencyUnit.USD, Values.Amount.factorize(4770.00)));\n        tx.setShares(Values.Share.factorize(1));\n        tx.setType(PortfolioTransaction.Type.BUY);\n\n        assertThat(tx.getGrossPricePerShare(),\n                        is(Quote.of(CurrencyUnit.USD, Values.Quote.factorize(47.70))));\n    }\n\n    @Test\n    public void testGrossPricePerShareWithCurrencyConversion()'''
           if marker not in text:
               raise SystemExit('PortfolioTransactionTest insertion point not found')
+          p.write_text(text.replace(marker, addition, 1), encoding='utf-8')
+
+          # Cost basis regression: two lots use their own booking-date multiplier;
+          # later multiplier changes must not revalue old lots. Test both FIFO and MA.
+          test_path = 'name.abuchen.portfolio.tests/src/name/abuchen/portfolio/snapshot/security/CostCalculationTest.java'
+          p = Path(test_path)
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('''import name.abuchen.portfolio.model.Security;\nimport name.abuchen.portfolio.model.TaxesAndFees;''',
+                              '''import name.abuchen.portfolio.model.Security;\nimport name.abuchen.portfolio.model.SecurityMultiplier;\nimport name.abuchen.portfolio.model.TaxesAndFees;''', 1)
+          marker = '''    @Test\n    public void testFifoBuySellTransactions()'''
+          addition = '''    @Test\n    public void testHistoricalMultiplierNormalizedQuoteCost()\n    {\n        Client client = new Client();\n        Security security = new SecurityBuilder().addTo(client);\n        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), 100.0));\n        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-07-01"), 10.0));\n\n        Portfolio portfolio = new PortfolioBuilder()\n                        .buy(security, "2026-06-01", Values.Share.factorize(1), Values.Amount.factorize(4770.00))\n                        .buy(security, "2026-08-01", Values.Share.factorize(1), Values.Amount.factorize(520.00))\n                        .addTo(client);\n\n        CostCalculation cost = new CostCalculation();\n        cost.setTermCurrency(CurrencyUnit.EUR);\n        cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()\n                        .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));\n\n        assertThat(cost.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),\n                        is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(5290.00))));\n        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),\n                        is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(99.70))));\n        assertThat(cost.getQuoteCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),\n                        is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(99.70))));\n\n        PortfolioTransaction sell = new PortfolioTransaction();\n        sell.setType(PortfolioTransaction.Type.SELL);\n        sell.setSecurity(security);\n        sell.setDateTime(LocalDateTime.parse("2026-09-01T00:00"));\n        sell.setMonetaryAmount(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(600.00)));\n        sell.setShares(Values.Share.factorize(1));\n        portfolio.addTransaction(sell);\n\n        cost = new CostCalculation();\n        cost.setTermCurrency(CurrencyUnit.EUR);\n        cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()\n                        .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));\n\n        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),\n                        is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(52.00))));\n        assertThat(cost.getQuoteCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),\n                        is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(49.85))));\n    }\n\n    @Test\n    public void testFifoBuySellTransactions()'''
+          if marker not in text:
+              raise SystemExit('CostCalculationTest insertion point not found')
           p.write_text(text.replace(marker, addition, 1), encoding='utf-8')
           '@ | python -
 
@@ -85,17 +170,19 @@ jobs:
           mvn verify --batch-mode --file portfolio-app/pom.xml 2>&1 | Tee-Object -FilePath maven-build.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Commit verified patch and remove helper workflow
+      - name: Commit verified source patch and remove helper workflow
         if: success()
         shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add name.abuchen.portfolio/src/name/abuchen/portfolio/model/PortfolioTransaction.java
-          git add name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/SecuritiesChart.java
+          git add name.abuchen.portfolio/src/name/abuchen/portfolio/snapshot/security/CostCalculation.java
+          git add name.abuchen.portfolio/src/name/abuchen/portfolio/snapshot/security/LazySecurityPerformanceRecord.java
           git add name.abuchen.portfolio.tests/src/name/abuchen/portfolio/model/PortfolioTransactionTest.java
+          git add name.abuchen.portfolio.tests/src/name/abuchen/portfolio/snapshot/security/CostCalculationTest.java
           git rm .github/workflows/transaction-multiplier-chart-fix.yml
-          git commit -m "Fix multiplier quote scaling in security chart"
+          git commit -m "Preserve historical multiplier in holdings cost basis"
           git push origin HEAD:agent/transaction-multiplier-fix
 
       - name: Bundle Windows Java runtime
@@ -111,7 +198,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v6
         with:
-          name: PortfolioPerformance-Windows-x86_64-chart-fix-${{ github.run_number }}
+          name: PortfolioPerformance-Windows-x86_64-cost-basis-fix-${{ github.run_number }}
           path: portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio/
           if-no-files-found: error
           retention-days: 7
@@ -120,7 +207,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: transaction-multiplier-chart-fix-log
+          name: transaction-multiplier-cost-basis-fix-log
           path: maven-build.log
           if-no-files-found: warn
           retention-days: 7
