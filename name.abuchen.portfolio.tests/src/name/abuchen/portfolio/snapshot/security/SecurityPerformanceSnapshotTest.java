@@ -14,6 +14,7 @@ import name.abuchen.portfolio.junit.TestCurrencyConverter;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.CostMethod;
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.TaxesAndFees;
 import name.abuchen.portfolio.money.CurrencyUnit;
 import name.abuchen.portfolio.money.Money;
@@ -97,5 +98,38 @@ public class SecurityPerformanceSnapshotTest
 
         assertThat(position.getShares(), is(record.getSharesHeld()));
         assertThat(position.calculateValue(), is(record.getMarketValue()));
+    }
+
+    @Test
+    public void testCostPerShareKeepsHistoricalMultiplierWhenMultiplierChangesFrom10To20()
+    {
+        Client client = new Client();
+
+        Security security = new SecurityBuilder().addTo(client);
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), 10d));
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-07-01"), 20d));
+
+        new PortfolioBuilder()
+                        .buy(security, "2026-06-01", Values.Share.factorize(2), Values.Amount.factorize(1000d))
+                        .addTo(client);
+
+        Interval reportingPeriod = Interval.of(LocalDate.parse("2026-05-01"), LocalDate.parse("2026-08-01"));
+        LazySecurityPerformanceSnapshot snapshot = LazySecurityPerformanceSnapshot.create(client,
+                        new TestCurrencyConverter(), reportingPeriod);
+
+        assertThat(snapshot.getRecords(), hasSize(1));
+        assertThat(security.getMultiplier(reportingPeriod.getEnd()), is(20d));
+
+        LazySecurityPerformanceRecord record = snapshot.getRecords().get(0);
+        assertThat(record.getSharesHeld(), is(Values.Share.factorize(2)));
+        assertThat(record.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
+                        is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(1000d))));
+
+        // The BUY was booked with multiplier 10: 1,000 / 2 / 10 = 50.00.
+        // The later multiplier 20 must not re-scale the displayed historical entry price to 25.00.
+        assertThat(record.getCostPerSharesHeld(CostMethod.FIFO, TaxesAndFees.NOT_INCLUDED),
+                        is(Quote.of(CurrencyUnit.EUR, Values.Quote.factorize(50d))));
+        assertThat(record.getCostPerSharesHeld(CostMethod.MOVING_AVERAGE, TaxesAndFees.NOT_INCLUDED),
+                        is(Quote.of(CurrencyUnit.EUR, Values.Quote.factorize(50d))));
     }
 }
