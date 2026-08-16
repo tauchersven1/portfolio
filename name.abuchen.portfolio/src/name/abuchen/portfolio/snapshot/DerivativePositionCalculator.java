@@ -161,8 +161,13 @@ public final class DerivativePositionCalculator
             if (transactionShares == 0)
                 continue;
 
+            double transactionMultiplier = security.getMultiplier(transaction.getDateTime().toLocalDate());
+            if (transactionMultiplier <= 0d)
+                transactionMultiplier = 1d;
+
             BigDecimal transactionPrice = BigDecimal
-                            .valueOf(transaction.getGrossPricePerShare(securityConverter).getAmount());
+                            .valueOf(transaction.getGrossPricePerShare(securityConverter).getAmount())
+                            .multiply(BigDecimal.valueOf(transactionMultiplier), Values.MC);
 
             if (openShares == 0 || Long.signum(openShares) == Long.signum(transactionShares))
             {
