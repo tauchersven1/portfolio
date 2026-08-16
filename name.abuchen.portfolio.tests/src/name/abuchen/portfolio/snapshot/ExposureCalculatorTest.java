@@ -47,6 +47,16 @@ public class ExposureCalculatorTest
     }
 
     @Test
+    public void testDefaultOptionDeltaSigns()
+    {
+        Security call = optionWithoutDelta("Call", "CALL");
+        Security put = optionWithoutDelta("Put", "PUT");
+
+        assertThat(SecurityDelta.getDelta(call, DATE), is(1.0));
+        assertThat(SecurityDelta.getDelta(put, DATE), is(-1.0));
+    }
+
+    @Test
     public void testDirectionalOptionExposureForLongAndShortCallsAndPuts()
     {
         Client client = new Client();
@@ -142,12 +152,19 @@ public class ExposureCalculatorTest
 
     private Security option(String name, String putCall)
     {
+        Security option = optionWithoutDelta(name, putCall);
+        double delta = "PUT".equals(putCall) ? -0.5 : 0.5;
+        SecurityDelta.replaceAll(option, List.of(SecurityDelta.of(LocalDate.of(2026, 1, 1), delta)));
+        return option;
+    }
+
+    private Security optionWithoutDelta(String name, String putCall)
+    {
         Security option = new Security(name, "EUR");
         option.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "type", "OPTION");
         option.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "putCall", putCall);
         option.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "strike", "200");
         option.addMultiplier(SecurityMultiplier.of(LocalDate.of(2026, 1, 1), 100.0));
-        SecurityDelta.replaceAll(option, List.of(SecurityDelta.of(LocalDate.of(2026, 1, 1), 0.5)));
         return option;
     }
 
