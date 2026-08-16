@@ -139,7 +139,8 @@ public class SecurityMultiplierPage extends AbstractPage
         masterDataTab.setControl(masterData);
 
         Composite riskParameters = new Composite(tabs, SWT.NONE);
-        GridLayoutFactory.fillDefaults().numColumns(3).equalWidth(true).margins(10, 10).spacing(10, 8).applyTo(riskParameters);
+        GridLayoutFactory.fillDefaults().numColumns(3).equalWidth(true).margins(10, 10).spacing(10, 8)
+                        .applyTo(riskParameters);
         createMultiplierSection(riskParameters);
         createDeltaSection(riskParameters);
         createKnockoutLevelSection(riskParameters);
@@ -276,7 +277,8 @@ public class SecurityMultiplierPage extends AbstractPage
         GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).spacing(8, 8).applyTo(group);
         GridDataFactory.fillDefaults().grab(true, true).applyTo(group);
         Label explanation = new Label(group, SWT.WRAP);
-        explanation.setText("A multiplier is effective from its date until the next entry. Before the first entry, the multiplier is 1.0.");
+        explanation.setText(
+                        "A multiplier is effective from its date until the next entry. Before the first entry, the multiplier is 1.0.");
         GridDataFactory.fillDefaults().grab(true, false).applyTo(explanation);
 
         viewer = createHistoryViewer(group, "Multiplier", 0);
@@ -297,7 +299,11 @@ public class SecurityMultiplierPage extends AbstractPage
         GridDataFactory.fillDefaults().span(4, 1).applyTo(add);
         add.addSelectionListener(new SelectionAdapter()
         {
-            @Override public void widgetSelected(SelectionEvent e) { addOrReplaceMultiplier(); }
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                addOrReplaceMultiplier();
+            }
         });
         createActions(group, viewer, multipliers, "Clear multipliers", "Remove all multiplier entries?");
     }
@@ -309,7 +315,8 @@ public class SecurityMultiplierPage extends AbstractPage
         GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).spacing(8, 8).applyTo(group);
         GridDataFactory.fillDefaults().grab(true, true).applyTo(group);
         Label explanation = new Label(group, SWT.WRAP);
-        explanation.setText("Delta is effective from its date until the next entry. Calls default to +1.0 and puts to -1.0. Standard option deltas must be between -1.0 and 1.0.");
+        explanation.setText("Delta is effective from its date until the next entry. Calls default to +1.0 and puts to -1.0. "
+                        + "Standard option deltas must be between -1.0 and 1.0.");
         GridDataFactory.fillDefaults().grab(true, false).applyTo(explanation);
 
         deltaViewer = createHistoryViewer(group, "Delta", 1);
@@ -330,7 +337,11 @@ public class SecurityMultiplierPage extends AbstractPage
         GridDataFactory.fillDefaults().span(4, 1).applyTo(add);
         add.addSelectionListener(new SelectionAdapter()
         {
-            @Override public void widgetSelected(SelectionEvent e) { addOrReplaceDelta(); }
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                addOrReplaceDelta();
+            }
         });
         createActions(group, deltaViewer, deltas, "Clear deltas", "Remove all Delta entries?");
     }
@@ -342,7 +353,8 @@ public class SecurityMultiplierPage extends AbstractPage
         GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).spacing(8, 8).applyTo(knockoutLevelGroup);
         GridDataFactory.fillDefaults().grab(true, true).applyTo(knockoutLevelGroup);
         Label explanation = new Label(knockoutLevelGroup, SWT.WRAP);
-        explanation.setText("The current K.O. level is effective from its date until the next entry. This is useful for open-end K.O. certificates whose K.O. level changes over time.");
+        explanation.setText("The current K.O. level is effective from its date until the next entry. This is useful for "
+                        + "open-end K.O. certificates whose K.O. level changes over time.");
         GridDataFactory.fillDefaults().grab(true, false).applyTo(explanation);
 
         knockoutLevelViewer = createHistoryViewer(knockoutLevelGroup, "K.O. level", 2);
@@ -362,7 +374,11 @@ public class SecurityMultiplierPage extends AbstractPage
         GridDataFactory.fillDefaults().span(4, 1).applyTo(add);
         add.addSelectionListener(new SelectionAdapter()
         {
-            @Override public void widgetSelected(SelectionEvent e) { addOrReplaceKnockoutLevel(); }
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                addOrReplaceKnockoutLevel();
+            }
         });
         createActions(knockoutLevelGroup, knockoutLevelViewer, knockoutLevels, "Clear K.O. levels",
                         "Remove all current K.O. level entries?");
@@ -380,10 +396,13 @@ public class SecurityMultiplierPage extends AbstractPage
         dateColumn.getColumn().setWidth(140);
         dateColumn.setLabelProvider(new ColumnLabelProvider()
         {
-            @Override public String getText(Object element)
+            @Override
+            public String getText(Object element)
             {
-                if (type == 0) return Values.Date.format(((SecurityMultiplier) element).getDate());
-                if (type == 1) return Values.Date.format(((SecurityDelta) element).getDate());
+                if (type == 0)
+                    return Values.Date.format(((SecurityMultiplier) element).getDate());
+                if (type == 1)
+                    return Values.Date.format(((SecurityDelta) element).getDate());
                 return Values.Date.format(((SecurityKnockoutLevel) element).getDate());
             }
         });
@@ -392,10 +411,13 @@ public class SecurityMultiplierPage extends AbstractPage
         valueColumn.getColumn().setWidth(120);
         valueColumn.setLabelProvider(new ColumnLabelProvider()
         {
-            @Override public String getText(Object element)
+            @Override
+            public String getText(Object element)
             {
-                if (type == 0) return Double.toString(((SecurityMultiplier) element).getMultiplier());
-                if (type == 1) return Double.toString(((SecurityDelta) element).getDelta());
+                if (type == 0)
+                    return Double.toString(((SecurityMultiplier) element).getMultiplier());
+                if (type == 1)
+                    return Double.toString(((SecurityDelta) element).getDelta());
                 return Double.toString(((SecurityKnockoutLevel) element).getLevel());
             }
         });
@@ -410,7 +432,8 @@ public class SecurityMultiplierPage extends AbstractPage
         delete.setText("Delete selected");
         delete.addSelectionListener(new SelectionAdapter()
         {
-            @Override public void widgetSelected(SelectionEvent e)
+            @Override
+            public void widgetSelected(SelectionEvent e)
             {
                 IStructuredSelection selection = table.getStructuredSelection();
                 if (!selection.isEmpty())
@@ -424,7 +447,8 @@ public class SecurityMultiplierPage extends AbstractPage
         clear.setText("Clear all");
         clear.addSelectionListener(new SelectionAdapter()
         {
-            @Override public void widgetSelected(SelectionEvent e)
+            @Override
+            public void widgetSelected(SelectionEvent e)
             {
                 if (values.isEmpty() || MessageDialog.openConfirm(getShell(), title, message))
                 {
@@ -446,7 +470,8 @@ public class SecurityMultiplierPage extends AbstractPage
         String underlyingUUID = property(UNDERLYING_SECURITY_UUID);
         Security linkedUnderlying = underlyingUUID == null ? null : client.getSecurities().stream()
                         .filter(s -> underlyingUUID.equals(s.getUUID())).findFirst().orElse(null);
-        underlying.setText(linkedUnderlying != null ? underlyingLabel(linkedUnderlying) : valueOrEmpty(property(UNDERLYING)));
+        underlying.setText(
+                        linkedUnderlying != null ? underlyingLabel(linkedUnderlying) : valueOrEmpty(property(UNDERLYING)));
         exchange.setText(valueOrEmpty(property(EXCHANGE)));
         contractSymbol.setText(valueOrEmpty(property(CONTRACT_SYMBOL)));
         contractSize.setText(valueOrEmpty(property(CONTRACT_SIZE)));
@@ -525,9 +550,12 @@ public class SecurityMultiplierPage extends AbstractPage
     {
         boolean isOption = derivativeType != null && derivativeType.getSelectionIndex() == 2;
         boolean isKnockout = isOption && optionProductType != null && optionProductType.getSelectionIndex() == 2;
-        if (initialKnockoutLevelLabel != null) initialKnockoutLevelLabel.setEnabled(isKnockout);
-        if (initialKnockoutLevel != null) initialKnockoutLevel.setEnabled(isKnockout);
-        if (knockoutLevelGroup != null) setEnabledRecursive(knockoutLevelGroup, isKnockout);
+        if (initialKnockoutLevelLabel != null)
+            initialKnockoutLevelLabel.setEnabled(isKnockout);
+        if (initialKnockoutLevel != null)
+            initialKnockoutLevel.setEnabled(isKnockout);
+        if (knockoutLevelGroup != null)
+            setEnabledRecursive(knockoutLevelGroup, isKnockout);
     }
 
     private void loadMultiplierSelection()
@@ -566,10 +594,15 @@ public class SecurityMultiplierPage extends AbstractPage
     private void addOrReplaceMultiplier()
     {
         double value = parsePositive(multiplierValue, "Invalid multiplier", "Enter a positive numeric multiplier.");
-        if (Double.isNaN(value)) return;
+        if (Double.isNaN(value))
+            return;
+
         SecurityMultiplier replacement = SecurityMultiplier.of(getMultiplierDate(), value);
         int index = Collections.binarySearch(multipliers, replacement);
-        if (index >= 0) multipliers.set(index, replacement); else multipliers.add(~index, replacement);
+        if (index >= 0)
+            multipliers.set(index, replacement);
+        else
+            multipliers.add(~index, replacement);
         viewer.refresh();
         viewer.setSelection(new StructuredSelection(replacement), true);
     }
@@ -598,7 +631,10 @@ public class SecurityMultiplierPage extends AbstractPage
 
         SecurityDelta replacement = SecurityDelta.of(getDeltaDate(), value);
         int index = Collections.binarySearch(deltas, replacement);
-        if (index >= 0) deltas.set(index, replacement); else deltas.add(~index, replacement);
+        if (index >= 0)
+            deltas.set(index, replacement);
+        else
+            deltas.add(~index, replacement);
         deltaViewer.refresh();
         deltaViewer.setSelection(new StructuredSelection(replacement), true);
     }
@@ -606,10 +642,15 @@ public class SecurityMultiplierPage extends AbstractPage
     private void addOrReplaceKnockoutLevel()
     {
         double value = parsePositive(knockoutLevelValue, "Invalid K.O. level", "Enter a positive numeric K.O. level.");
-        if (Double.isNaN(value)) return;
+        if (Double.isNaN(value))
+            return;
+
         SecurityKnockoutLevel replacement = SecurityKnockoutLevel.of(getKnockoutLevelDate(), value);
         int index = Collections.binarySearch(knockoutLevels, replacement);
-        if (index >= 0) knockoutLevels.set(index, replacement); else knockoutLevels.add(~index, replacement);
+        if (index >= 0)
+            knockoutLevels.set(index, replacement);
+        else
+            knockoutLevels.add(~index, replacement);
         knockoutLevelViewer.refresh();
         knockoutLevelViewer.setSelection(new StructuredSelection(replacement), true);
     }
@@ -619,7 +660,8 @@ public class SecurityMultiplierPage extends AbstractPage
         try
         {
             double value = Double.parseDouble(control.getText().trim().replace(',', '.'));
-            if (Double.isFinite(value) && value > 0) return value;
+            if (Double.isFinite(value) && value > 0)
+                return value;
         }
         catch (NumberFormatException e)
         {
@@ -638,12 +680,39 @@ public class SecurityMultiplierPage extends AbstractPage
         deltaValue.selectAll();
     }
 
-    private LocalDate getMultiplierDate() { return LocalDate.of(effectiveDate.getYear(), effectiveDate.getMonth() + 1, effectiveDate.getDay()); }
-    private void setMultiplierDate(LocalDate date) { if (effectiveDate != null) effectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth()); }
-    private LocalDate getDeltaDate() { return LocalDate.of(deltaEffectiveDate.getYear(), deltaEffectiveDate.getMonth() + 1, deltaEffectiveDate.getDay()); }
-    private void setDeltaDate(LocalDate date) { if (deltaEffectiveDate != null) deltaEffectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth()); }
-    private LocalDate getKnockoutLevelDate() { return LocalDate.of(knockoutLevelEffectiveDate.getYear(), knockoutLevelEffectiveDate.getMonth() + 1, knockoutLevelEffectiveDate.getDay()); }
-    private void setKnockoutLevelDate(LocalDate date) { if (knockoutLevelEffectiveDate != null) knockoutLevelEffectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth()); }
+    private LocalDate getMultiplierDate()
+    {
+        return LocalDate.of(effectiveDate.getYear(), effectiveDate.getMonth() + 1, effectiveDate.getDay());
+    }
+
+    private void setMultiplierDate(LocalDate date)
+    {
+        if (effectiveDate != null)
+            effectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth());
+    }
+
+    private LocalDate getDeltaDate()
+    {
+        return LocalDate.of(deltaEffectiveDate.getYear(), deltaEffectiveDate.getMonth() + 1, deltaEffectiveDate.getDay());
+    }
+
+    private void setDeltaDate(LocalDate date)
+    {
+        if (deltaEffectiveDate != null)
+            deltaEffectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth());
+    }
+
+    private LocalDate getKnockoutLevelDate()
+    {
+        return LocalDate.of(knockoutLevelEffectiveDate.getYear(), knockoutLevelEffectiveDate.getMonth() + 1,
+                        knockoutLevelEffectiveDate.getDay());
+    }
+
+    private void setKnockoutLevelDate(LocalDate date)
+    {
+        if (knockoutLevelEffectiveDate != null)
+            knockoutLevelEffectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth());
+    }
 
     public void applyChanges()
     {
@@ -655,7 +724,8 @@ public class SecurityMultiplierPage extends AbstractPage
         if (typeIndex <= 0)
         {
             SecurityKnockoutLevel.replaceAll(security, Collections.emptyList());
-            for (String name : DERIVATIVE_PROPERTIES) setProperty(name, null);
+            for (String name : DERIVATIVE_PROPERTIES)
+                setProperty(name, null);
             return;
         }
 
@@ -700,19 +770,54 @@ public class SecurityMultiplierPage extends AbstractPage
         }
     }
 
-    private String property(String name) { return security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, name).orElse(null); }
-    private void setProperty(String name, String value) { security.setPropertyValue(SecurityProperty.Type.DERIVATIVE, name, value == null || value.isBlank() ? null : value.trim()); }
-    private static String text(Text control) { String value = control.getText().trim(); return value.isEmpty() ? null : value; }
-    private static String comboText(Combo control) { String value = control.getText().trim(); return value.isEmpty() ? null : value; }
-    private static String underlyingLabel(Security security) { String ticker = security.getTickerSymbol(); return ticker == null || ticker.isBlank() ? security.getName() : security.getName() + " [" + ticker + "]"; }
-    private static String valueOrEmpty(String value) { return value == null ? "" : value; }
+    private String property(String name)
+    {
+        return security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, name).orElse(null);
+    }
+
+    private void setProperty(String name, String value)
+    {
+        security.setPropertyValue(SecurityProperty.Type.DERIVATIVE, name,
+                        value == null || value.isBlank() ? null : value.trim());
+    }
+
+    private static String text(Text control)
+    {
+        String value = control.getText().trim();
+        return value.isEmpty() ? null : value;
+    }
+
+    private static String comboText(Combo control)
+    {
+        String value = control.getText().trim();
+        return value.isEmpty() ? null : value;
+    }
+
+    private static String underlyingLabel(Security security)
+    {
+        String ticker = security.getTickerSymbol();
+        return ticker == null || ticker.isBlank() ? security.getName() : security.getName() + " [" + ticker + "]";
+    }
+
+    private static String valueOrEmpty(String value)
+    {
+        return value == null ? "" : value;
+    }
 
     private static void selectByValue(Combo combo, String storedValue, String... values)
     {
         combo.select(0);
-        if (storedValue == null) return;
+        if (storedValue == null)
+            return;
+
         for (int ii = 0; ii < values.length; ii++)
-            if (values[ii].equals(storedValue)) { combo.select(ii + 1); return; }
+        {
+            if (values[ii].equals(storedValue))
+            {
+                combo.select(ii + 1);
+                return;
+            }
+        }
     }
 
     private static String comboValue(Combo combo, String... values)
@@ -727,7 +832,8 @@ public class SecurityMultiplierPage extends AbstractPage
         for (Control child : composite.getChildren())
         {
             child.setEnabled(enabled);
-            if (child instanceof Composite childComposite) setEnabledRecursive(childComposite, enabled);
+            if (child instanceof Composite childComposite)
+                setEnabledRecursive(childComposite, enabled);
         }
     }
 
@@ -747,7 +853,11 @@ public class SecurityMultiplierPage extends AbstractPage
             date.setEnabled(false);
             enabled.addSelectionListener(new SelectionAdapter()
             {
-                @Override public void widgetSelected(SelectionEvent e) { date.setEnabled(enabled.getSelection()); }
+                @Override
+                public void widgetSelected(SelectionEvent e)
+                {
+                    date.setEnabled(enabled.getSelection());
+                }
             });
         }
 
@@ -765,8 +875,16 @@ public class SecurityMultiplierPage extends AbstractPage
                 date.setEnabled(false);
                 return;
             }
-            try { setDate(LocalDate.parse(value)); }
-            catch (RuntimeException e) { enabled.setSelection(false); date.setEnabled(false); }
+
+            try
+            {
+                setDate(LocalDate.parse(value));
+            }
+            catch (RuntimeException e)
+            {
+                enabled.setSelection(false);
+                date.setEnabled(false);
+            }
         }
 
         private void setDate(LocalDate value)
@@ -778,7 +896,8 @@ public class SecurityMultiplierPage extends AbstractPage
 
         private LocalDate getDate()
         {
-            if (!enabled.getSelection()) return null;
+            if (!enabled.getSelection())
+                return null;
             return LocalDate.of(date.getYear(), date.getMonth() + 1, date.getDay());
         }
 
