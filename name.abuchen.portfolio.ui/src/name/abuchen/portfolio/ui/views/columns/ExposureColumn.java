@@ -39,8 +39,8 @@ public class ExposureColumn extends Column
         this.boldFontProvider = boldFontProvider;
 
         setDescription("Delta-adjusted economic exposure. Standard options use the strike; futures and K.O. "
-                        + "certificates use the linked underlying. Formula: quantity x reference price x multiplier "
-                        + "x delta, converted into the reporting currency.");
+                        + "certificates use the linked underlying. Cash accounts use their market value. Formula for "
+                        + "derivatives: quantity x reference price x multiplier x delta, converted into the reporting currency.");
         setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -77,7 +77,8 @@ public class ExposureColumn extends Column
             return element.getChildren().map(this::getExposure).filter(Objects::nonNull)
                             .collect(MoneyCollectors.sum(currencyCode));
 
-        // Cash accounts do not create market exposure.
-        return null;
+        // Cash accounts are represented as non-security leaf positions in the statement of assets.
+        // Their economic exposure is their current market value in the reporting currency.
+        return element.getValuation();
     }
 }
