@@ -22,7 +22,8 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
 /* package */class CostCalculation extends Calculation
 {
     public record CostCalculationResult(long sharesHeld, Money fifoCost, TrailRecord fifoCostTrail, Money netFifoCost,
-                    Money movingAverageCost, Money netMovingAverageCost, Money fees, Money taxes)
+                    Money movingAverageCost, Money netMovingAverageCost, Money fifoQuoteCost, Money netFifoQuoteCost,
+                    Money movingAverageQuoteCost, Money netMovingAverageQuoteCost, Money fees, Money taxes)
     {
     }
 
@@ -32,6 +33,8 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
         private long shares;
         private long grossAmount;
         private long netAmount;
+        private long grossQuoteAmount;
+        private long netQuoteAmount;
 
         private final TrailRecord trail;
 
@@ -42,12 +45,15 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
          */
         private final long originalShares;
 
-        public LineItem(TransactionOwner<?> owner, long shares, long grossAmount, long netAmount, TrailRecord trail)
+        public LineItem(TransactionOwner<?> owner, long shares, long grossAmount, long netAmount,
+                        long grossQuoteAmount, long netQuoteAmount, TrailRecord trail)
         {
             this.owner = owner;
             this.shares = shares;
             this.grossAmount = grossAmount;
             this.netAmount = netAmount;
+            this.grossQuoteAmount = grossQuoteAmount;
+            this.netQuoteAmount = netQuoteAmount;
             this.trail = trail;
             this.originalShares = shares;
         }
@@ -57,10 +63,26 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
 
     private long movingRelativeCost = 0;
     private long movingRelativeNetCost = 0;
+    private long movingRelativeQuoteCost = 0;
+    private long movingRelativeNetQuoteCost = 0;
     private long heldShares = 0;
 
     private long fees;
     private long taxes;
+
+    private double getMultiplier(java.time.LocalDate date)
+    {
+        if (getSecurity() == null || date == null)
+            return 1d;
+
+        double multiplier = getSecurity().getMultiplier(date);
+        return multiplier > 0d ? multiplier : 1d;
+    }
+
+    private long normalizeQuoteCost(long amount, java.time.LocalDate date)
+    {
+        return Math.round(amount / getMultiplier(date));
+    }
 
     @Override
     public void visit(CurrencyConverter converter, CalculationLineItem.ValuationAtStart item)
@@ -69,6 +91,7 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
         SecurityPosition position = item.getSecurityPosition().orElseThrow(IllegalArgumentException::new);
 
         long amount = converter.convert(item.getDateTime(), valuation).getAmount();
+        long quoteAmount = normalizeQuoteCost(amount, item.getDateTime().toLocalDate());
 
         TrailRecord trail = TrailRecord.ofPosition(item.getDateTime().toLocalDate(), (Portfolio) item.getOwner(),
                         position);
@@ -77,9 +100,11 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
             trail = trail.convert(Money.of(getTermCurrency(), amount),
                             converter.getRate(item.getDateTime(), valuation.getCurrencyCode()));
 
-        fifo.add(new LineItem(item.getOwner(), position.getShares(), amount, amount, trail));
+        fifo.add(new LineItem(item.getOwner(), position.getShares(), amount, amount, quoteAmount, quoteAmount, trail));
         movingRelativeCost += amount;
         movingRelativeNetCost += amount;
+        movingRelativeQuoteCost += quoteAmount;
+        movingRelativeNetQuoteCost += quoteAmount;
         heldShares += position.getShares();
     }
 
@@ -97,15 +122,20 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
             case DELIVERY_INBOUND:
                 long grossAmount = t.getMonetaryAmount(converter).getAmount();
                 long netAmount = t.getGrossValue(converter).getAmount();
+                long grossQuoteAmount = normalizeQuoteCost(grossAmount, t.getDateTime().toLocalDate());
+                long netQuoteAmount = normalizeQuoteCost(netAmount, t.getDateTime().toLocalDate());
 
                 TrailRecord trail = TrailRecord.ofTransaction(t);
                 if (!getTermCurrency().equals(t.getCurrencyCode()))
                     trail = trail.convert(Money.of(getTermCurrency(), grossAmount),
                                     converter.getRate(t.getDateTime(), t.getCurrencyCode()));
 
-                fifo.add(new LineItem(item.getOwner(), t.getShares(), grossAmount, netAmount, trail));
+                fifo.add(new LineItem(item.getOwner(), t.getShares(), grossAmount, netAmount, grossQuoteAmount,
+                                netQuoteAmount, trail));
                 movingRelativeCost += grossAmount;
                 movingRelativeNetCost += netAmount;
+                movingRelativeQuoteCost += grossQuoteAmount;
+                movingRelativeNetQuoteCost += netQuoteAmount;
                 heldShares += t.getShares();
                 break;
 
@@ -118,12 +148,17 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
                 {
                     movingRelativeCost = 0;
                     movingRelativeNetCost = 0;
+                    movingRelativeQuoteCost = 0;
+                    movingRelativeNetQuoteCost = 0;
                     heldShares = 0;
                 }
                 else
                 {
                     movingRelativeCost = Math.round(movingRelativeCost / (double) heldShares * remaining);
                     movingRelativeNetCost = Math.round(movingRelativeNetCost / (double) heldShares * remaining);
+                    movingRelativeQuoteCost = Math.round(movingRelativeQuoteCost / (double) heldShares * remaining);
+                    movingRelativeNetQuoteCost = Math
+                                    .round(movingRelativeNetQuoteCost / (double) heldShares * remaining);
                     heldShares = remaining;
                 }
 
@@ -142,6 +177,8 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
 
                     entry.grossAmount -= Math.round(n / (double) entry.shares * entry.grossAmount);
                     entry.netAmount -= Math.round(n / (double) entry.shares * entry.netAmount);
+                    entry.grossQuoteAmount -= Math.round(n / (double) entry.shares * entry.grossQuoteAmount);
+                    entry.netQuoteAmount -= Math.round(n / (double) entry.shares * entry.netQuoteAmount);
                     entry.shares -= n;
 
                     sold -= n;
@@ -186,11 +223,16 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
                     {
                         long transferredGrossAmount = Math.round(n / (double) entry.shares * entry.grossAmount);
                         long transferredNetAmount = Math.round(n / (double) entry.shares * entry.netAmount);
+                        long transferredGrossQuoteAmount = Math
+                                        .round(n / (double) entry.shares * entry.grossQuoteAmount);
+                        long transferredNetQuoteAmount = Math.round(n / (double) entry.shares * entry.netQuoteAmount);
 
                         LineItem transfer = new LineItem(item.getOwner(), //
                                         n, //
                                         transferredGrossAmount, //
                                         transferredNetAmount, //
+                                        transferredGrossQuoteAmount, //
+                                        transferredNetQuoteAmount, //
                                         entry.trail.fraction(Money.of(getTermCurrency(), transferredGrossAmount), n,
                                                         entry.originalShares) //
                                                         .transfer(item.getDateTime().toLocalDate(), entry.owner,
@@ -198,6 +240,8 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
 
                         entry.grossAmount -= transferredGrossAmount;
                         entry.netAmount -= transferredNetAmount;
+                        entry.grossQuoteAmount -= transferredGrossQuoteAmount;
+                        entry.netQuoteAmount -= transferredNetQuoteAmount;
                         entry.shares -= n;
 
                         fifo.add(fifo.indexOf(entry) + 1, transfer);
@@ -261,7 +305,11 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
         return new CostCalculationResult(getSharesHeld(), getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
                         getFifoCostTrail(), getCost(CostMethod.FIFO, TaxesAndFees.NOT_INCLUDED),
                         getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),
-                        getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.NOT_INCLUDED), getFees(), getTaxes());
+                        getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.NOT_INCLUDED),
+                        getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
+                        getQuoteCost(CostMethod.FIFO, TaxesAndFees.NOT_INCLUDED),
+                        getQuoteCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),
+                        getQuoteCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.NOT_INCLUDED), getFees(), getTaxes());
     }
 
     public TrailRecord getFifoCostTrail()
@@ -299,11 +347,28 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
         });
     }
 
+    public Money getQuoteCost(CostMethod method, TaxesAndFees taxesAndFees)
+    {
+        return Money.of(getTermCurrency(), switch (method)
+        {
+            case FIFO -> sumFifoQuoteCost(taxesAndFees);
+            case MOVING_AVERAGE -> taxesAndFees.isIncluded() ? movingRelativeQuoteCost : movingRelativeNetQuoteCost;
+        });
+    }
+
     private long sumFifo(TaxesAndFees taxesAndFees)
     {
         long cost = 0;
         for (LineItem entry : fifo)
             cost += taxesAndFees.isIncluded() ? entry.grossAmount : entry.netAmount;
+        return cost;
+    }
+
+    private long sumFifoQuoteCost(TaxesAndFees taxesAndFees)
+    {
+        long cost = 0;
+        for (LineItem entry : fifo)
+            cost += taxesAndFees.isIncluded() ? entry.grossQuoteAmount : entry.netQuoteAmount;
         return cost;
     }
 }
