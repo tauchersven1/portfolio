@@ -80,6 +80,8 @@ public final class ExposureCalculator
         double factor = security.getMultiplier(date);
         if (exposureType == ExposureType.DELTA_ADJUSTED)
             factor *= SecurityDelta.getDelta(security, date);
+        else if (exposureType == ExposureType.NOTIONAL && DerivativePositionCalculator.OPTION.equals(derivativeType))
+            factor *= SecurityDelta.getDefaultDelta(security);
 
         Money rawExposure = DerivativePositionCalculator.valueOf(position.getShares(), referenceValue, factor,
                         exposureCurrency);
