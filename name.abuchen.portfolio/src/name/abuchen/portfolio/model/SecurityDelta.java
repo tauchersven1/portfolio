@@ -11,12 +11,16 @@ import java.util.Objects;
 /**
  * A time-dependent option delta attached to a security. A delta is valid from
  * its date until it is superseded by a later entry. If no entry exists for a
- * requested date, the default delta is 1.0.
+ * requested date, calls default to +1.0 and puts to -1.0.
  */
 public class SecurityDelta implements Comparable<SecurityDelta>
 {
     public static final long DIVIDER = 1_000_000L;
     private static final String PROPERTY_PREFIX = "delta."; //$NON-NLS-1$
+    private static final String DERIVATIVE_TYPE = "type"; //$NON-NLS-1$
+    private static final String OPTION = "OPTION"; //$NON-NLS-1$
+    private static final String PUT_CALL = "putCall"; //$NON-NLS-1$
+    private static final String PUT = "PUT"; //$NON-NLS-1$
 
     public static final class ByDate implements Comparator<SecurityDelta>, Serializable
     {
@@ -102,7 +106,7 @@ public class SecurityDelta implements Comparable<SecurityDelta>
 
         List<SecurityDelta> deltas = getDeltas(security);
         if (deltas.isEmpty())
-            return 1.0;
+            return getDefaultDelta(security);
 
         SecurityDelta probe = new SecurityDelta(requestedDate, 0);
         int index = Collections.binarySearch(deltas, probe);
@@ -110,9 +114,18 @@ public class SecurityDelta implements Comparable<SecurityDelta>
         if (index >= 0)
             return deltas.get(index).getDelta();
         if (index == -1)
-            return 1.0;
+            return getDefaultDelta(security);
 
         return deltas.get(-index - 2).getDelta();
+    }
+
+    public static double getDefaultDelta(Security security)
+    {
+        boolean option = OPTION.equals(security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, DERIVATIVE_TYPE)
+                        .orElse(null));
+        boolean put = PUT.equals(
+                        security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, PUT_CALL).orElse(null));
+        return option && put ? -1.0 : 1.0;
     }
 
     public static void replaceAll(Security security, List<SecurityDelta> deltas)
