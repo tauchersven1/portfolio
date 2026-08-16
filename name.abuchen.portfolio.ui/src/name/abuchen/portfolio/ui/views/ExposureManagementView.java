@@ -56,6 +56,7 @@ public class ExposureManagementView extends AbstractFinanceView
     private static final String ALL = "All";
     private static final String OPEN_END = "Open End";
     private static final String NO_MATURITY = "No maturity";
+    private static final String CASH = "Cash";
 
     private static final DateTimeFormatter MONTH_FORMAT = DateTimeFormatter.ofPattern("MMM yy", Locale.getDefault());
 
@@ -139,9 +140,8 @@ public class ExposureManagementView extends AbstractFinanceView
         GridDataFactory.fillDefaults().grab(true, false).applyTo(filters);
 
         exposureType = combo(filters, "Exposure type", "Delta adjusted", "Notional", "Market value");
-        instrumentType = combo(filters, "Instrument type", "All", "Derivatives", "Option", "Future",
-                        "K.O. certificate", "Non-derivatives");
-        instrumentType.select(1);
+        instrumentType = combo(filters, "Instrument type", ALL, "Derivatives", "Option", "Future",
+                        "K.O. certificate", "Non-derivatives", CASH);
         underlying = combo(filters, "Underlying", ALL);
         putCall = combo(filters, "Put / Call", ALL, "Call", "Put", "Not specified");
         direction = combo(filters, "Direction", ALL, "Long", "Short");
@@ -239,9 +239,19 @@ public class ExposureManagementView extends AbstractFinanceView
         currentExposureType = type;
         List<ExposureRow> answer = new ArrayList<>();
 
-        snapshot.getAssetPositions().filter(p -> p.getSecurity() != null).forEach(asset -> {
+        snapshot.getAssetPositions().forEach(asset -> {
             Security security = asset.getSecurity();
             SecurityPosition position = asset.getPosition();
+
+            if (security == null)
+            {
+                Money exposure = asset.getValuation();
+                if (!exposure.isZero())
+                    answer.add(new ExposureRow(null, position, exposure, NO_MATURITY, null, CASH, CASH,
+                                    asset.getDescription()));
+                return;
+            }
+
             Money exposure = ExposureCalculator.calculate(getClient(), position, valuationDate, converter, type);
             if (exposure == null || exposure.isZero())
                 return;
@@ -295,16 +305,20 @@ public class ExposureManagementView extends AbstractFinanceView
     private boolean matchesFilters(ExposureRow row)
     {
         String selectedInstrument = instrumentType.getText();
-        boolean derivative = DerivativePositionCalculator.getDerivativeType(row.security()) != null;
+        boolean cash = row.security() == null;
+        boolean derivative = !cash && DerivativePositionCalculator.getDerivativeType(row.security()) != null;
         if ("Derivatives".equals(selectedInstrument) && !derivative)
             return false;
-        if ("Option".equals(selectedInstrument) && !DerivativePositionCalculator.isOption(row.security()))
+        if ("Option".equals(selectedInstrument) && (cash || !DerivativePositionCalculator.isOption(row.security())))
             return false;
-        if ("Future".equals(selectedInstrument) && !DerivativePositionCalculator.isFuture(row.security()))
+        if ("Future".equals(selectedInstrument) && (cash || !DerivativePositionCalculator.isFuture(row.security())))
             return false;
-        if ("K.O. certificate".equals(selectedInstrument) && !ExposureCalculator.isKnockoutCertificate(row.security()))
+        if ("K.O. certificate".equals(selectedInstrument)
+                        && (cash || !ExposureCalculator.isKnockoutCertificate(row.security())))
             return false;
         if ("Non-derivatives".equals(selectedInstrument) && derivative)
+            return false;
+        if (CASH.equals(selectedInstrument) && !cash)
             return false;
 
         if (!ALL.equals(underlying.getText()) && !underlying.getText().equals(row.underlying()))
