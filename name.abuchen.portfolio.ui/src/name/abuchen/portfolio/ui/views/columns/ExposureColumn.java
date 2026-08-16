@@ -28,19 +28,35 @@ public class ExposureColumn extends Column
     private final Supplier<LocalDate> dateProvider;
     private final Supplier<CurrencyConverter> converterProvider;
     private final Supplier<Font> boldFontProvider;
+    private final ExposureType exposureType;
 
     public ExposureColumn(Client client, Supplier<LocalDate> dateProvider, Supplier<CurrencyConverter> converterProvider,
                     Supplier<Font> boldFontProvider)
     {
-        super("derivativeExposure", "Exposure", SWT.RIGHT, 90);
+        this(client, dateProvider, converterProvider, boldFontProvider, ExposureType.NOTIONAL, "derivativeExposure",
+                        "Exposure nom.");
+    }
+
+    public ExposureColumn(Client client, Supplier<LocalDate> dateProvider, Supplier<CurrencyConverter> converterProvider,
+                    Supplier<Font> boldFontProvider, ExposureType exposureType, String id, String label)
+    {
+        super(id, label, SWT.RIGHT, 100);
         this.client = client;
         this.dateProvider = dateProvider;
         this.converterProvider = converterProvider;
         this.boldFontProvider = boldFontProvider;
+        this.exposureType = exposureType;
 
-        setDescription("Delta-adjusted economic exposure. Standard options use the strike; futures and K.O. "
-                        + "certificates use the linked underlying. Cash accounts use their market value. Formula for "
-                        + "derivatives: quantity x reference price x multiplier x delta, converted into the reporting currency.");
+        if (exposureType == ExposureType.DELTA_ADJUSTED)
+            setDescription("Delta-adjusted economic exposure. Standard options use the strike; futures and K.O. "
+                            + "certificates use the linked underlying. Cash accounts use their market value. Formula for "
+                            + "derivatives: signed quantity x reference price x multiplier x directional delta, converted "
+                            + "into the reporting currency.");
+        else
+            setDescription("Nominal economic exposure. Standard options use the strike; futures and K.O. certificates "
+                            + "use the linked underlying. Cash accounts use their market value. Formula for derivatives: "
+                            + "signed quantity x reference price x multiplier, converted into the reporting currency.");
+
         setLabelProvider(new ColumnLabelProvider()
         {
             @Override
@@ -70,7 +86,7 @@ public class ExposureColumn extends Column
     {
         if (element.isSecurity())
             return ExposureCalculator.calculate(client, element.getSecurityPosition(), dateProvider.get(),
-                            converterProvider.get(), ExposureType.DELTA_ADJUSTED);
+                            converterProvider.get(), exposureType);
 
         String currencyCode = converterProvider.get().getTermCurrency();
         if (element.isCategory() || element.isGroupByTaxonomy())
