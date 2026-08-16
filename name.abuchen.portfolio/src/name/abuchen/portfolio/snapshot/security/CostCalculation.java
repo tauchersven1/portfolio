@@ -1,5 +1,7 @@
 package name.abuchen.portfolio.snapshot.security;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,8 +24,8 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
 /* package */class CostCalculation extends Calculation
 {
     public record CostCalculationResult(long sharesHeld, Money fifoCost, TrailRecord fifoCostTrail, Money netFifoCost,
-                    Money movingAverageCost, Money netMovingAverageCost, Money fifoQuoteCost, Money netFifoQuoteCost,
-                    Money movingAverageQuoteCost, Money netMovingAverageQuoteCost, Money fees, Money taxes)
+                    Money movingAverageCost, Money netMovingAverageCost, long fifoQuoteCost, long netFifoQuoteCost,
+                    long movingAverageQuoteCost, long netMovingAverageQuoteCost, Money fees, Money taxes)
     {
     }
 
@@ -45,8 +47,8 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
          */
         private final long originalShares;
 
-        public LineItem(TransactionOwner<?> owner, long shares, long grossAmount, long netAmount,
-                        long grossQuoteAmount, long netQuoteAmount, TrailRecord trail)
+        public LineItem(TransactionOwner<?> owner, long shares, long grossAmount, long netAmount, long grossQuoteAmount,
+                        long netQuoteAmount, TrailRecord trail)
         {
             this.owner = owner;
             this.shares = shares;
@@ -70,18 +72,16 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
     private long fees;
     private long taxes;
 
-    private double getMultiplier(java.time.LocalDate date)
-    {
-        if (getSecurity() == null || date == null)
-            return 1d;
-
-        double multiplier = getSecurity().getMultiplier(date);
-        return multiplier > 0d ? multiplier : 1d;
-    }
-
     private long normalizeQuoteCost(long amount, java.time.LocalDate date)
     {
-        return Math.round(amount / getMultiplier(date));
+        double multiplier = getSecurity() != null && date != null ? getSecurity().getMultiplier(date) : 1d;
+        if (multiplier <= 0d)
+            multiplier = 1d;
+
+        return BigDecimal.valueOf(amount) //
+                        .multiply(BigDecimal.valueOf(Values.Quote.factorToMoney())) //
+                        .divide(BigDecimal.valueOf(multiplier), 0, RoundingMode.HALF_UP) //
+                        .longValue();
     }
 
     @Override
@@ -347,13 +347,13 @@ import name.abuchen.portfolio.snapshot.trail.TrailRecord;
         });
     }
 
-    public Money getQuoteCost(CostMethod method, TaxesAndFees taxesAndFees)
+    public long getQuoteCost(CostMethod method, TaxesAndFees taxesAndFees)
     {
-        return Money.of(getTermCurrency(), switch (method)
+        return switch (method)
         {
             case FIFO -> sumFifoQuoteCost(taxesAndFees);
             case MOVING_AVERAGE -> taxesAndFees.isIncluded() ? movingRelativeQuoteCost : movingRelativeNetQuoteCost;
-        });
+        };
     }
 
     private long sumFifo(TaxesAndFees taxesAndFees)
