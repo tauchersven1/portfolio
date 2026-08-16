@@ -52,17 +52,10 @@ public class CostCalculationTest
         cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()
                         .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));
 
-        // expected:
-        // 3149,20 - round(3149,20 * 15/109) + 1684,92 + 959,30 = 5360,04385
-
         assertThat(cost.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
                         is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(5360.04))));
 
         assertThat(cost.getFifoCostTrail().getValue(), is(cost.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED)));
-
-        // expected moving average is identical because it is only one buy
-        // transaction
-        // 3149,20 * 94/109 + 1684.92 + 959.30 = 5360,04385
 
         assertThat(cost.getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),
                         is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(5360.04))));
@@ -87,16 +80,10 @@ public class CostCalculationTest
         cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()
                         .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));
 
-        // expected:
-        // 3149,20 + 1684,92 - round(3149,20 * 15/109) = 4400,743853211009174
-
         assertThat(cost.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
                         is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(4400.74))));
 
         assertThat(cost.getFifoCostTrail().getValue(), is(cost.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED)));
-
-        // transaction
-        // (3149,20 + 1684.92) * 146/161 = 4383,736149068322981
 
         assertThat(cost.getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),
                         is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(4383.74))));
@@ -142,7 +129,6 @@ public class CostCalculationTest
 
         LazySecurityPerformanceRecord record = snapshot.getRecords().get(0);
 
-        // 1.1588 = exchange rate of test currency converter on 2015-01-16
         assertThat(record.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
                         is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize((1000 / 1.1588) + 1100))));
 
@@ -219,17 +205,14 @@ public class CostCalculationTest
         cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()
                         .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));
 
-        // The monetary cost basis remains EUR 4,770. The parallel quote basis
-        // is normalized with the multiplier 100 effective on the BUY date.
+        // Monetary basis remains 4,770. Quote basis is 4,770 / 100 = 47.70.
         assertThat(cost.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
                         is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(4770d))));
-        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
-                        is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(47.70d))));
+        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED), is(Values.Quote.factorize(47.70d)));
 
-        // A later multiplier change must not revalue the historical entry cost.
+        // The later multiplier 10 must not revalue the historical BUY.
         assertThat(security.getMultiplier(LocalDate.parse("2026-08-01")), is(10d));
-        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
-                        is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(47.70d))));
+        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED), is(Values.Quote.factorize(47.70d)));
     }
 
     @Test
@@ -251,8 +234,7 @@ public class CostCalculationTest
         cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()
                         .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));
 
-        // 4770 / 100 + 520 / 10 = 99.70
-        Money expected = Money.of(CurrencyUnit.EUR, Values.Amount.factorize(99.70d));
+        long expected = Values.Quote.factorize(99.70d); // 4770 / 100 + 520 / 10
         assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED), is(expected));
         assertThat(cost.getQuoteCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED), is(expected));
     }
@@ -277,12 +259,8 @@ public class CostCalculationTest
         cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()
                         .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));
 
-        // FIFO removes the first lot (47.70); the second lot remains at 52.00.
-        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
-                        is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(52d))));
-
-        // Moving average removes half of 99.70.
+        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED), is(Values.Quote.factorize(52d)));
         assertThat(cost.getQuoteCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),
-                        is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(49.85d))));
+                        is(Values.Quote.factorize(49.85d)));
     }
 }
