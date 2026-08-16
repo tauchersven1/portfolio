@@ -149,6 +149,7 @@ public class StatementOfAssetsView extends AbstractFinanceView
 
         addDerivativeContractColumns();
         assetViewer.getColumnHelper().addColumn(createPutCallColumn());
+        restoreColumnConfiguration();
 
         assetViewer.setToolBarManager(getViewToolBarManager());
 
@@ -176,6 +177,17 @@ public class StatementOfAssetsView extends AbstractFinanceView
         notifyModelUpdated();
 
         return control;
+    }
+
+    private void restoreColumnConfiguration()
+    {
+        String identifier = StatementOfAssetsViewer.class.getName();
+        var configSet = getClient().getSettings().getConfigurationSet(identifier);
+        String activeUUID = getPreferenceStore().getString(identifier + "$picked"); //$NON-NLS-1$
+        String data = configSet.lookup(activeUUID).map(config -> config.getData())
+                        .orElseGet(() -> configSet.getConfigurations().findFirst().map(config -> config.getData())
+                                        .orElse("")); //$NON-NLS-1$
+        assetViewer.getColumnHelper().onConfigurationPicked(data);
     }
 
     private void addDerivativeContractColumns()
