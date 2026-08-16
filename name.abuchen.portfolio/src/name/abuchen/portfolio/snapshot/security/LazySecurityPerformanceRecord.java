@@ -167,6 +167,23 @@ public final class LazySecurityPerformanceRecord extends BaseSecurityPerformance
         };
     }
 
+    /**
+     * Historical cost basis normalized with the multiplier that was effective
+     * on each transaction date. This basis is used only to derive quote-level
+     * entry prices; the normal monetary cost basis above remains unchanged.
+     */
+    private Money getQuoteCostMoney(CostMethod costMethod, TaxesAndFees taxesAndFees)
+    {
+        return switch (costMethod)
+        {
+            case FIFO -> taxesAndFees.isIncluded() ? costCalculation.get().fifoQuoteCost()
+                            : costCalculation.get().netFifoQuoteCost();
+
+            case MOVING_AVERAGE -> taxesAndFees.isIncluded() ? costCalculation.get().movingAverageQuoteCost()
+                            : costCalculation.get().netMovingAverageQuoteCost();
+        };
+    }
+
     private final LazyValue<DividendCalculationResult> dividendCalculation = new LazyValue<>(() -> {
         // ensure cost calculation is done (and has calculated
         // moving averages)
@@ -299,7 +316,7 @@ public final class LazySecurityPerformanceRecord extends BaseSecurityPerformance
     public Quote getCostPerSharesHeld(CostMethod costMethod, TaxesAndFees taxesAndFees)
     {
         var sharesHeldForCostCalculation = costCalculation.get().sharesHeld();
-        Money cost = getCostMoney(costMethod, taxesAndFees);
+        Money cost = getQuoteCostMoney(costMethod, taxesAndFees);
 
         return Quote.of(cost.getCurrencyCode(), Math.round(cost.getAmount() / (double) sharesHeldForCostCalculation
                         * Values.Share.factor() * Values.Quote.factorToMoney()));
@@ -419,20 +436,9 @@ public final class LazySecurityPerformanceRecord extends BaseSecurityPerformance
         switch (key)
         {
             case Trails.FIFO_COST:
-                return Trail.of(getSecurityName(), costCalculation.get().fifoCostTrail());
-            case Trails.REALIZED_CAPITAL_GAINS:
-                return Trail.of(getSecurityName(), getRealizedCapitalGains(CostMethod.FIFO).getCapitalGainsTrail());
-            case Trails.REALIZED_CAPITAL_GAINS_FOREX:
-                return Trail.of(getSecurityName(),
-                                getRealizedCapitalGains(CostMethod.FIFO).getForexCapitalGainsTrail());
-            case Trails.UNREALIZED_CAPITAL_GAINS:
-                return Trail.of(getSecurityName(), getUnrealizedCapitalGains(CostMethod.FIFO).getCapitalGainsTrail());
-            case Trails.UNREALIZED_CAPITAL_GAINS_FOREX:
-                return Trail.of(getSecurityName(),
-                                getUnrealizedCapitalGains(CostMethod.FIFO).getForexCapitalGainsTrail());
+                return Optional.of(costCalculation.get().fifoCostTrail());
             default:
-                return Optional.empty();
+                return super.explain(key);
         }
     }
-
 }
