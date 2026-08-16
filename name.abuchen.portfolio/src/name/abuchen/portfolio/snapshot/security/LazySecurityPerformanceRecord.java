@@ -437,9 +437,19 @@ public final class LazySecurityPerformanceRecord extends BaseSecurityPerformance
         switch (key)
         {
             case Trails.FIFO_COST:
-                return Optional.of(costCalculation.get().fifoCostTrail());
+                return Trail.of(getSecurityName(), costCalculation.get().fifoCostTrail());
+            case Trails.REALIZED_CAPITAL_GAINS:
+                return Trail.of(getSecurityName(), getRealizedCapitalGains(CostMethod.FIFO).getCapitalGainsTrail());
+            case Trails.REALIZED_CAPITAL_GAINS_FOREX:
+                return Trail.of(getSecurityName(),
+                                getRealizedCapitalGains(CostMethod.FIFO).getForexCapitalGainsTrail());
+            case Trails.UNREALIZED_CAPITAL_GAINS:
+                return Trail.of(getSecurityName(), getUnrealizedCapitalGains(CostMethod.FIFO).getCapitalGainsTrail());
+            case Trails.UNREALIZED_CAPITAL_GAINS_FOREX:
+                return Trail.of(getSecurityName(),
+                                getUnrealizedCapitalGains(CostMethod.FIFO).getForexCapitalGainsTrail());
             default:
-                return super.explain(key);
+                return Optional.empty();
         }
     }
 }
