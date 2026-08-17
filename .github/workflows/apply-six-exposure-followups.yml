@@ -1,4 +1,4 @@
-name: Apply six exposure follow-ups
+name: Build exposure follow-ups
 
 on:
   push:
@@ -6,65 +6,42 @@ on:
       - agent/exposure-followups-six
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch-and-build:
+  build-and-test:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Apply requested changes
-        id: patch
-        shell: pwsh
-        run: |
-          python .github/scripts/apply_six_followups.py
-          $changed = Get-Content patch-changed.txt
-          "changed=$changed" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: Commit patched sources
-        if: steps.patch.outputs.changed == 'true'
-        shell: pwsh
-        run: |
-          git config user.name "OpenAI"
-          git config user.email "actions@users.noreply.github.com"
-          git add name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/wizards/security/SecurityMultiplierPage.java name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/ExposureManagementView.java
-          git commit -m "Implement six exposure management follow-ups"
-          git push
 
       - name: Set up Zulu JDK 21
-        if: steps.patch.outputs.changed == 'true'
         uses: actions/setup-java@v5
         with:
           java-version: 21
           distribution: zulu
 
       - name: Set up Maven 3.9.16
-        if: steps.patch.outputs.changed == 'true'
         uses: stCarolas/setup-maven@v5
         with:
           maven-version: 3.9.16
 
       - name: Full build and tests
-        if: steps.patch.outputs.changed == 'true'
         shell: pwsh
         run: |
           mvn verify --batch-mode --file portfolio-app/pom.xml 2>&1 | Tee-Object -FilePath maven-build.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload Maven build log
-        if: always() && steps.patch.outputs.changed == 'true'
+        if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: six-followups-maven-build-log-${{ github.run_number }}
+          name: exposure-followups-maven-build-log-${{ github.run_number }}
           path: maven-build.log
           if-no-files-found: warn
           retention-days: 7
 
       - name: Bundle Windows Java runtime
-        if: success() && steps.patch.outputs.changed == 'true'
+        if: success()
         shell: pwsh
         run: |
           $product = 'portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio'
@@ -73,10 +50,10 @@ jobs:
           Copy-Item -Path (Join-Path $env:JAVA_HOME '*') -Destination $jre -Recurse -Force
 
       - name: Upload Windows x86_64 build
-        if: success() && steps.patch.outputs.changed == 'true'
+        if: success()
         uses: actions/upload-artifact@v6
         with:
-          name: PortfolioPerformance-Windows-x86_64-six-followups-${{ github.run_number }}
+          name: PortfolioPerformance-Windows-x86_64-exposure-followups-${{ github.run_number }}
           path: portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio/
           if-no-files-found: error
           retention-days: 7
