@@ -5,6 +5,7 @@ on:
     branches:
       - agent/security-multiplier
       - agent/derivatives-tab
+      - agent/exposure-total-trading-symbol
 
 jobs:
   build:
