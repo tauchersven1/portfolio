@@ -29,9 +29,13 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.TabFolder;
+import org.eclipse.swt.widgets.TabItem;
 
+import name.abuchen.portfolio.model.Classification;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.Taxonomy;
 import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.CurrencyConverterImpl;
@@ -70,6 +74,7 @@ public class ExposureManagementView extends AbstractFinanceView
     private Combo exposureType;
     private Combo instrumentType;
     private Combo underlying;
+    private Combo underlyingClassification;
     private Combo tradingSymbol;
     private Combo putCall;
     private Combo direction;
@@ -83,6 +88,7 @@ public class ExposureManagementView extends AbstractFinanceView
     private Label longValue;
     private Label shortValue;
     private Canvas chart;
+    private Canvas tradingSymbolChart;
 
     private LocalDate valuationDate = LocalDate.now();
     private CurrencyConverter converter;
@@ -121,15 +127,28 @@ public class ExposureManagementView extends AbstractFinanceView
         createFilters(body);
         createKpis(body);
 
-        Group chartGroup = new Group(body, SWT.NONE);
-        chartGroup.setText("Exposure by Maturity");
-        GridLayoutFactory.fillDefaults().margins(8, 8).applyTo(chartGroup);
-        GridDataFactory.fillDefaults().grab(true, true).applyTo(chartGroup);
+        TabFolder chartTabs = new TabFolder(body, SWT.NONE);
+        GridDataFactory.fillDefaults().grab(true, true).applyTo(chartTabs);
 
-        chart = new Canvas(chartGroup, SWT.DOUBLE_BUFFERED | SWT.BORDER);
+        Composite maturityPage = new Composite(chartTabs, SWT.NONE);
+        GridLayoutFactory.fillDefaults().margins(8, 8).applyTo(maturityPage);
+        chart = new Canvas(maturityPage, SWT.DOUBLE_BUFFERED | SWT.BORDER);
         chart.setBackground(Colors.theme().defaultBackground());
-        chart.addPaintListener(this::paintChart);
+        chart.addPaintListener(e -> paintChart(e, false));
         GridDataFactory.fillDefaults().grab(true, true).hint(800, 420).applyTo(chart);
+        TabItem maturityTab = new TabItem(chartTabs, SWT.NONE);
+        maturityTab.setText("Exposure by Maturity");
+        maturityTab.setControl(maturityPage);
+
+        Composite symbolPage = new Composite(chartTabs, SWT.NONE);
+        GridLayoutFactory.fillDefaults().margins(8, 8).applyTo(symbolPage);
+        tradingSymbolChart = new Canvas(symbolPage, SWT.DOUBLE_BUFFERED | SWT.BORDER);
+        tradingSymbolChart.setBackground(Colors.theme().defaultBackground());
+        tradingSymbolChart.addPaintListener(e -> paintChart(e, true));
+        GridDataFactory.fillDefaults().grab(true, true).hint(800, 420).applyTo(tradingSymbolChart);
+        TabItem symbolTab = new TabItem(chartTabs, SWT.NONE);
+        symbolTab.setText("Exposure by Trading Symbol");
+        symbolTab.setControl(symbolPage);
 
         notifyModelUpdated();
         return body;
@@ -139,13 +158,14 @@ public class ExposureManagementView extends AbstractFinanceView
     {
         Group filters = new Group(parent, SWT.NONE);
         filters.setText("Filters");
-        GridLayoutFactory.fillDefaults().numColumns(10).margins(8, 8).spacing(8, 4).applyTo(filters);
+        GridLayoutFactory.fillDefaults().numColumns(11).margins(8, 8).spacing(8, 4).applyTo(filters);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(filters);
 
         exposureType = combo(filters, "Exposure type", "Delta adjusted", "Notional", "Market value");
         instrumentType = combo(filters, "Instrument type", ALL, "Derivatives", "Option", "Future",
                         "K.O. certificate", "Non-derivatives", CASH);
         underlying = combo(filters, "Underlying", ALL);
+        underlyingClassification = combo(filters, "Underlying classification", ALL, "Not specified");
         tradingSymbol = combo(filters, "Trading Symbol", ALL);
         putCall = combo(filters, "Put / Call", ALL, "Call", "Put", "Not specified");
         direction = combo(filters, "Direction", ALL, "Long", "Short");
@@ -157,8 +177,10 @@ public class ExposureManagementView extends AbstractFinanceView
                         .filter(c -> currency.indexOf(c) < 0).forEach(currency::add);
         totalBar = combo(filters, "Total bar", "Hide", "Show");
 
-        List.of(exposureType, instrumentType, underlying, tradingSymbol, putCall, direction, maturityRange, groupBy,
-                        currency, totalBar).forEach(c -> c.addListener(SWT.Selection, e -> refreshReport()));
+        exposureType.addListener(SWT.Selection, e -> notifyModelUpdated());
+        currency.addListener(SWT.Selection, e -> notifyModelUpdated());
+        List.of(instrumentType, underlying, underlyingClassification, tradingSymbol, putCall, direction, maturityRange,
+                        groupBy, totalBar).forEach(c -> c.addListener(SWT.Selection, e -> refreshReport()));
     }
 
     private Combo combo(Composite parent, String label, String... items)
@@ -224,6 +246,7 @@ public class ExposureManagementView extends AbstractFinanceView
     private void rebuildSecurityFilters(ClientSnapshot snapshot)
     {
         rebuildUnderlyingFilter(snapshot);
+        rebuildUnderlyingClassificationFilter(snapshot);
         rebuildTradingSymbolFilter(snapshot);
     }
 
@@ -244,6 +267,23 @@ public class ExposureManagementView extends AbstractFinanceView
         underlying.select(index >= 0 ? index : 0);
     }
 
+    private void rebuildUnderlyingClassificationFilter(ClientSnapshot snapshot)
+    {
+        if (underlyingClassification == null)
+            return;
+
+        String selected = underlyingClassification.getText();
+        Set<String> values = new LinkedHashSet<>();
+        values.add(ALL);
+        values.add("Not specified");
+        snapshot.getAssetPositions().map(AssetPosition::getSecurity).filter(s -> s != null)
+                        .forEach(s -> values.addAll(underlyingClassifications(s)));
+
+        underlyingClassification.setItems(values.toArray(String[]::new));
+        int index = underlyingClassification.indexOf(selected);
+        underlyingClassification.select(index >= 0 ? index : 0);
+    }
+
     private void rebuildTradingSymbolFilter(ClientSnapshot snapshot)
     {
         if (tradingSymbol == null)
@@ -253,7 +293,7 @@ public class ExposureManagementView extends AbstractFinanceView
         Set<String> values = new LinkedHashSet<>();
         values.add(ALL);
         snapshot.getAssetPositions().map(AssetPosition::getSecurity).filter(s -> s != null)
-                        .map(Security::getTickerSymbol).filter(s -> s != null && !s.isBlank())
+                        .map(this::tradingSymbolLabel).filter(s -> !s.isBlank() && !"No trading symbol".equals(s))
                         .sorted(String.CASE_INSENSITIVE_ORDER).forEach(values::add);
 
         tradingSymbol.setItems(values.toArray(String[]::new));
@@ -295,14 +335,6 @@ public class ExposureManagementView extends AbstractFinanceView
         if (chart == null || chart.isDisposed())
             return;
 
-        // Exposure type and currency changes require a fresh snapshot/calculation.
-        if (selectedExposureType() != currentExposureType || converter == null
-                        || !converter.getTermCurrency().equals(currency.getText()))
-        {
-            notifyModelUpdated();
-            return;
-        }
-
         List<ExposureRow> filtered = rows.stream().filter(this::matchesFilters).toList();
         long gross = filtered.stream().mapToLong(r -> Math.abs(r.exposure().getAmount())).sum();
         long net = filtered.stream().mapToLong(r -> r.exposure().getAmount()).sum();
@@ -316,6 +348,8 @@ public class ExposureManagementView extends AbstractFinanceView
         shortValue.setText(Values.Money.format(Money.of(ccy, shortExposure)));
 
         chart.redraw();
+        if (tradingSymbolChart != null && !tradingSymbolChart.isDisposed())
+            tradingSymbolChart.redraw();
     }
 
     private ExposureType selectedExposureType()
@@ -351,8 +385,24 @@ public class ExposureManagementView extends AbstractFinanceView
 
         if (!ALL.equals(underlying.getText()) && !underlying.getText().equals(row.underlying()))
             return false;
+
+        String selectedClassification = underlyingClassification.getText();
+        if (!ALL.equals(selectedClassification))
+        {
+            if (cash || linkedUnderlying(row.security()) == null)
+                return false;
+            Set<String> classifications = underlyingClassifications(row.security());
+            if ("Not specified".equals(selectedClassification))
+            {
+                if (!classifications.isEmpty())
+                    return false;
+            }
+            else if (!classifications.contains(selectedClassification))
+                return false;
+        }
+
         if (!ALL.equals(tradingSymbol.getText())
-                        && (cash || !tradingSymbol.getText().equals(row.security().getTickerSymbol())))
+                        && (cash || !tradingSymbol.getText().equals(tradingSymbolLabel(row.security()))))
             return false;
         if (!ALL.equals(putCall.getText()) && !putCall.getText().equals(row.putCall()))
             return false;
@@ -377,10 +427,10 @@ public class ExposureManagementView extends AbstractFinanceView
         return true;
     }
 
-    private void paintChart(PaintEvent event)
+    private void paintChart(PaintEvent event, boolean byTradingSymbol)
     {
         GC gc = event.gc;
-        Rectangle area = chart.getClientArea();
+        Rectangle area = ((Canvas) event.widget).getClientArea();
         gc.setForeground(Colors.theme().defaultForeground());
 
         List<ExposureRow> filtered = rows.stream().filter(this::matchesFilters).toList();
@@ -398,9 +448,19 @@ public class ExposureManagementView extends AbstractFinanceView
             values.put(TOTAL, total);
         }
 
-        filtered.stream().sorted(Comparator.comparing(this::maturitySortKey)).forEach(row -> values
-                        .computeIfAbsent(row.maturity(), k -> new LinkedHashMap<>())
-                        .merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
+        if (byTradingSymbol)
+        {
+            filtered.stream().sorted(Comparator.comparing(r -> tradingSymbolLabel(r.security()), String.CASE_INSENSITIVE_ORDER))
+                            .forEach(row -> values.computeIfAbsent(tradingSymbolLabel(row.security()),
+                                            k -> new LinkedHashMap<>())
+                                            .merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
+        }
+        else
+        {
+            filtered.stream().sorted(Comparator.comparing(this::maturitySortKey)).forEach(row -> values
+                            .computeIfAbsent(row.maturity(), k -> new LinkedHashMap<>())
+                            .merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
+        }
 
         Set<String> groups = new LinkedHashSet<>();
         values.values().forEach(v -> groups.addAll(v.keySet()));
@@ -494,6 +554,42 @@ public class ExposureManagementView extends AbstractFinanceView
             case 2 -> row.underlying();
             default -> row.putCall();
         };
+    }
+
+    private String tradingSymbolLabel(Security security)
+    {
+        if (security == null)
+            return CASH;
+        String contractSymbol = property(security, "contractSymbol");
+        if (contractSymbol != null && !contractSymbol.isBlank())
+            return contractSymbol;
+        String ticker = security.getTickerSymbol();
+        return ticker == null || ticker.isBlank() ? "No trading symbol" : ticker;
+    }
+
+    private Security linkedUnderlying(Security derivative)
+    {
+        if (derivative == null)
+            return null;
+        String uuid = property(derivative, DerivativePositionCalculator.UNDERLYING_SECURITY_UUID);
+        if (uuid == null || uuid.isBlank())
+            return null;
+        return getClient().getSecurities().stream().filter(s -> uuid.equals(s.getUUID())).findFirst().orElse(null);
+    }
+
+    private Set<String> underlyingClassifications(Security derivative)
+    {
+        Security linked = linkedUnderlying(derivative);
+        if (linked == null)
+            return Set.of();
+
+        Set<String> answer = new LinkedHashSet<>();
+        for (Taxonomy taxonomy : getClient().getTaxonomies())
+        {
+            for (Classification classification : taxonomy.getClassifications(linked))
+                answer.add(taxonomy.getName() + ": " + classification.getName());
+        }
+        return answer;
     }
 
     private String maturitySortKey(ExposureRow row)

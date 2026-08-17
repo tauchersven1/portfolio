@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.eclipse.jface.dialogs.MessageDialog;
@@ -75,6 +76,7 @@ public class SecurityMultiplierPage extends AbstractPage
     private final List<SecurityDelta> deltas = new ArrayList<>();
     private final List<SecurityKnockoutLevel> knockoutLevels = new ArrayList<>();
     private final Map<String, Security> underlyingSecurities = new LinkedHashMap<>();
+    private boolean updatingUnderlyingSuggestions;
 
     private Combo derivativeType;
     private Combo underlying;
@@ -185,13 +187,14 @@ public class SecurityMultiplierPage extends AbstractPage
 
         new Label(commonFields, SWT.NONE).setText("Underlying");
         underlying = new Combo(commonFields, SWT.DROP_DOWN);
-        underlying.setToolTipText("Select another security or enter a free-text underlying");
+        underlying.setToolTipText("Select another security or enter a free-text underlying. Typing filters the available assets.");
         client.getSecurities().stream().filter(s -> s != security)
                         .sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName())).forEach(s -> {
                             String label = underlyingLabel(s);
                             underlyingSecurities.put(label, s);
                             underlying.add(label);
                         });
+        underlying.addModifyListener(e -> updateUnderlyingSuggestions());
         GridDataFactory.fillDefaults().grab(true, false).applyTo(underlying);
 
         new Label(commonFields, SWT.NONE).setText("Exchange");
@@ -286,9 +289,13 @@ public class SecurityMultiplierPage extends AbstractPage
         GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).spacing(8, 8).applyTo(multiplierGroup);
         GridDataFactory.fillDefaults().grab(true, true).applyTo(multiplierGroup);
 
+        String multiplierHelp = "The multiplier is stored as a time series rather than a single scalar because it can change over the life of an instrument. "
+                        + "A value is effective from its date until the next entry; before the first entry the multiplier is 1.0. "
+                        + "Practical examples are AUD and SEK government futures, where the applicable conversion/multiplier can change between transaction dates.";
         Label explanation = new Label(multiplierGroup, SWT.WRAP);
-        explanation.setText(
-                        "A multiplier is effective from its date until the next entry. Before the first entry, the multiplier is 1.0.");
+        explanation.setText("(i) Multiplier history - hover for details");
+        explanation.setToolTipText(multiplierHelp);
+        multiplierGroup.setToolTipText(multiplierHelp);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(explanation);
 
         viewer = new TableViewer(multiplierGroup, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
@@ -330,7 +337,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         new Label(editor, SWT.NONE).setText("Valid from");
         effectiveDate = new DateTime(editor, SWT.DATE | SWT.DROP_DOWN);
-        setMultiplierDate(LocalDate.now());
+        setMultiplierDate(earliestTransactionDate());
 
         new Label(editor, SWT.NONE).setText("Multiplier");
         multiplierValue = new Text(editor, SWT.BORDER | SWT.RIGHT);
@@ -441,7 +448,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         new Label(editor, SWT.NONE).setText("Valid from");
         deltaEffectiveDate = new DateTime(editor, SWT.DATE | SWT.DROP_DOWN);
-        setDeltaDate(LocalDate.now());
+        setDeltaDate(earliestTransactionDate());
 
         new Label(editor, SWT.NONE).setText("Delta");
         deltaValue = new Text(editor, SWT.BORDER | SWT.RIGHT);
@@ -546,7 +553,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         new Label(editor, SWT.NONE).setText("Valid from");
         knockoutLevelEffectiveDate = new DateTime(editor, SWT.DATE | SWT.DROP_DOWN);
-        setKnockoutLevelDate(LocalDate.now());
+        setKnockoutLevelDate(earliestTransactionDate());
 
         new Label(editor, SWT.NONE).setText("K.O. level");
         knockoutLevelValue = new Text(editor, SWT.BORDER | SWT.RIGHT);
@@ -598,6 +605,39 @@ public class SecurityMultiplierPage extends AbstractPage
                 }
             }
         });
+    }
+
+    private LocalDate earliestTransactionDate()
+    {
+        return security.getTransactions(client).stream()
+                        .map(pair -> pair.getTransaction().getDateTime().toLocalDate())
+                        .min(LocalDate::compareTo).orElse(LocalDate.now());
+    }
+
+    private void updateUnderlyingSuggestions()
+    {
+        if (underlying == null || updatingUnderlyingSuggestions)
+            return;
+
+        String typed = underlying.getText();
+        String search = typed.trim().toLowerCase(Locale.ROOT);
+        String[] matches = underlyingSecurities.keySet().stream()
+                        .filter(label -> search.isEmpty() || label.toLowerCase(Locale.ROOT).contains(search))
+                        .toArray(String[]::new);
+
+        updatingUnderlyingSuggestions = true;
+        try
+        {
+            underlying.setItems(matches);
+            underlying.setText(typed);
+            underlying.setSelection(new org.eclipse.swt.graphics.Point(typed.length(), typed.length()));
+            if (!search.isEmpty() && matches.length > 0)
+                underlying.setListVisible(true);
+        }
+        finally
+        {
+            updatingUnderlyingSuggestions = false;
+        }
     }
 
     private void loadDerivativeData()
