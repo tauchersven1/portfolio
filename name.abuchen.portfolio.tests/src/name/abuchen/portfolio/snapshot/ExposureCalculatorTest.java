@@ -88,6 +88,37 @@ public class ExposureCalculatorTest
     }
 
     @Test
+    public void testNotionalOptionExposureUsesPutCallDirectionOnly()
+    {
+        Client client = new Client();
+        TestCurrencyConverter converter = new TestCurrencyConverter();
+
+        Security call = option("Call", "CALL");
+        Security put = option("Put", "PUT");
+        client.addSecurity(call);
+        client.addSecurity(put);
+
+        Money longCall = ExposureCalculator.calculate(client,
+                        position(call, 2, 4.0, PortfolioTransaction.Type.BUY), DATE, converter,
+                        ExposureType.NOTIONAL);
+        Money shortCall = ExposureCalculator.calculate(client,
+                        position(call, 2, 4.0, PortfolioTransaction.Type.SELL), DATE, converter,
+                        ExposureType.NOTIONAL);
+        Money longPut = ExposureCalculator.calculate(client,
+                        position(put, 2, 4.0, PortfolioTransaction.Type.BUY), DATE, converter,
+                        ExposureType.NOTIONAL);
+        Money shortPut = ExposureCalculator.calculate(client,
+                        position(put, 2, 4.0, PortfolioTransaction.Type.SELL), DATE, converter,
+                        ExposureType.NOTIONAL);
+
+        long expected = Values.Amount.factorize(40000.0);
+        assertThat(longCall, is(Money.of("EUR", expected)));
+        assertThat(shortCall, is(Money.of("EUR", -expected)));
+        assertThat(longPut, is(Money.of("EUR", -expected)));
+        assertThat(shortPut, is(Money.of("EUR", expected)));
+    }
+
+    @Test
     public void testKnockoutCertificateUsesUnderlyingAsExposureReference()
     {
         Client client = new Client();
