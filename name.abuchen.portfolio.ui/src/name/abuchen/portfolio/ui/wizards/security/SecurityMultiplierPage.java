@@ -653,6 +653,39 @@ public class SecurityMultiplierPage extends AbstractPage
         }
     }
 
+    private LocalDate earliestTransactionDate()
+    {
+        return security.getTransactions(client).stream()
+                        .map(pair -> pair.getTransaction().getDateTime().toLocalDate())
+                        .min(LocalDate::compareTo).orElse(LocalDate.now());
+    }
+
+    private void updateUnderlyingSuggestions()
+    {
+        if (underlying == null || updatingUnderlyingSuggestions)
+            return;
+
+        String typed = underlying.getText();
+        String search = typed.trim().toLowerCase(Locale.ROOT);
+        String[] matches = underlyingSecurities.keySet().stream()
+                        .filter(label -> search.isEmpty() || label.toLowerCase(Locale.ROOT).contains(search))
+                        .toArray(String[]::new);
+
+        updatingUnderlyingSuggestions = true;
+        try
+        {
+            underlying.setItems(matches);
+            underlying.setText(typed);
+            underlying.setSelection(new org.eclipse.swt.graphics.Point(typed.length(), typed.length()));
+            if (!search.isEmpty() && matches.length > 0)
+                underlying.setListVisible(true);
+        }
+        finally
+        {
+            updatingUnderlyingSuggestions = false;
+        }
+    }
+
     private void loadDerivativeData()
     {
         selectByValue(derivativeType, property(TYPE), "FUTURE", "OPTION");
