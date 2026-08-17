@@ -35,8 +35,8 @@ import org.eclipse.swt.widgets.TabItem;
 import name.abuchen.portfolio.model.Classification;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
-import name.abuchen.portfolio.model.Taxonomy;
 import name.abuchen.portfolio.model.SecurityProperty;
+import name.abuchen.portfolio.model.Taxonomy;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.CurrencyConverterImpl;
 import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
@@ -72,6 +72,7 @@ public class ExposureManagementView extends AbstractFinanceView
     private TimeMachineDropDown timeMachineDropDown;
 
     private Combo exposureType;
+    private Combo chartView;
     private Combo instrumentType;
     private Combo underlying;
     private Combo underlyingClassification;
@@ -92,7 +93,6 @@ public class ExposureManagementView extends AbstractFinanceView
 
     private LocalDate valuationDate = LocalDate.now();
     private CurrencyConverter converter;
-    private ExposureType currentExposureType = ExposureType.DELTA_ADJUSTED;
     private List<ExposureRow> rows = List.of();
 
     @PostConstruct
@@ -107,7 +107,7 @@ public class ExposureManagementView extends AbstractFinanceView
     @Override
     protected String getDefaultTitle()
     {
-        return "Exposuremanagement";
+        return "Bestand Exposure";
     }
 
     @Override
@@ -158,10 +158,11 @@ public class ExposureManagementView extends AbstractFinanceView
     {
         Group filters = new Group(parent, SWT.NONE);
         filters.setText("Filters");
-        GridLayoutFactory.fillDefaults().numColumns(11).margins(8, 8).spacing(8, 4).applyTo(filters);
+        GridLayoutFactory.fillDefaults().numColumns(12).margins(8, 8).spacing(8, 4).applyTo(filters);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(filters);
 
-        exposureType = combo(filters, "Exposure type", "Delta adjusted", "Notional", "Market value");
+        exposureType = combo(filters, "Exposure basis", "Delta-adjusted", "Notional", "Market value");
+        chartView = combo(filters, "Chart view", "Gross Exposure", "Net Exposure (Long / Short)");
         instrumentType = combo(filters, "Instrument type", ALL, "Derivatives", "Option", "Future",
                         "K.O. certificate", "Non-derivatives", CASH);
         underlying = combo(filters, "Underlying", ALL);
@@ -179,8 +180,8 @@ public class ExposureManagementView extends AbstractFinanceView
 
         exposureType.addListener(SWT.Selection, e -> notifyModelUpdated());
         currency.addListener(SWT.Selection, e -> notifyModelUpdated());
-        List.of(instrumentType, underlying, underlyingClassification, tradingSymbol, putCall, direction, maturityRange,
-                        groupBy, totalBar).forEach(c -> c.addListener(SWT.Selection, e -> refreshReport()));
+        List.of(chartView, instrumentType, underlying, underlyingClassification, tradingSymbol, putCall, direction,
+                        maturityRange, groupBy, totalBar).forEach(c -> c.addListener(SWT.Selection, e -> refreshReport()));
     }
 
     private Combo combo(Composite parent, String label, String... items)
@@ -304,7 +305,6 @@ public class ExposureManagementView extends AbstractFinanceView
     private void refreshRows(ClientSnapshot snapshot)
     {
         ExposureType type = selectedExposureType();
-        currentExposureType = type;
         List<ExposureRow> answer = new ArrayList<>();
 
         snapshot.getAssetPositions().forEach(asset -> {
@@ -440,71 +440,92 @@ public class ExposureManagementView extends AbstractFinanceView
             return;
         }
 
+        if (chartView != null && chartView.getSelectionIndex() == 1)
+        {
+            int gap = 16;
+            int half = Math.max(1, (area.height - gap) / 2);
+            Rectangle longArea = new Rectangle(area.x, area.y, area.width, half);
+            Rectangle shortArea = new Rectangle(area.x, area.y + half + gap, area.width,
+                            Math.max(1, area.height - half - gap));
+            paintPositiveChart(gc, longArea, filtered.stream().filter(r -> r.exposure().isPositive()).toList(),
+                            byTradingSymbol, "Long Exposure", false);
+            paintPositiveChart(gc, shortArea, filtered.stream().filter(r -> r.exposure().isNegative()).toList(),
+                            byTradingSymbol, "Short Exposure", true);
+        }
+        else
+        {
+            paintPositiveChart(gc, area, filtered, byTradingSymbol, "Gross Exposure", true);
+        }
+    }
+
+    private void paintPositiveChart(GC gc, Rectangle area, List<ExposureRow> chartRows, boolean byTradingSymbol,
+                    String title, boolean absoluteValues)
+    {
+        gc.setForeground(Colors.theme().defaultForeground());
+        gc.drawText(title, 12, area.y + 8, true);
+
+        if (chartRows.isEmpty())
+        {
+            gc.drawText("No exposure", 20, area.y + 32, true);
+            return;
+        }
+
         Map<String, Map<String, Long>> values = new LinkedHashMap<>();
         if (totalBar != null && totalBar.getSelectionIndex() == 1)
         {
             Map<String, Long> total = new LinkedHashMap<>();
-            filtered.forEach(row -> total.merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
+            chartRows.forEach(row -> total.merge(groupLabel(row), chartValue(row, absoluteValues), Long::sum));
             values.put(TOTAL, total);
         }
 
         if (byTradingSymbol)
         {
-            filtered.stream().sorted(Comparator.comparing(r -> tradingSymbolLabel(r.security()), String.CASE_INSENSITIVE_ORDER))
+            chartRows.stream().sorted(Comparator.comparing(r -> tradingSymbolLabel(r.security()), String.CASE_INSENSITIVE_ORDER))
                             .forEach(row -> values.computeIfAbsent(tradingSymbolLabel(row.security()),
                                             k -> new LinkedHashMap<>())
-                                            .merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
+                                            .merge(groupLabel(row), chartValue(row, absoluteValues), Long::sum));
         }
         else
         {
-            filtered.stream().sorted(Comparator.comparing(this::maturitySortKey)).forEach(row -> values
+            chartRows.stream().sorted(Comparator.comparing(this::maturitySortKey)).forEach(row -> values
                             .computeIfAbsent(row.maturity(), k -> new LinkedHashMap<>())
-                            .merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
+                            .merge(groupLabel(row), chartValue(row, absoluteValues), Long::sum));
         }
 
         Set<String> groups = new LinkedHashSet<>();
         values.values().forEach(v -> groups.addAll(v.keySet()));
-
-        long positiveMax = 0;
-        long negativeMax = 0;
-        for (Map<String, Long> bucket : values.values())
-        {
-            long positive = bucket.values().stream().mapToLong(v -> Math.max(0L, v)).sum();
-            long negative = bucket.values().stream().mapToLong(v -> Math.min(0L, v)).sum();
-            positiveMax = Math.max(positiveMax, positive);
-            negativeMax = Math.min(negativeMax, negative);
-        }
+        long max = values.values().stream()
+                        .mapToLong(bucket -> bucket.values().stream().mapToLong(Long::longValue).sum()).max().orElse(1L);
+        if (max <= 0)
+            max = 1;
 
         int left = 90;
         int right = 20;
-        int top = 44;
-        int bottom = byTradingSymbol ? 78 : 55;
+        int top = 40;
+        int bottom = byTradingSymbol ? 72 : 50;
+        int plotX = area.x + left;
+        int plotY = area.y + top;
         int plotWidth = Math.max(1, area.width - left - right);
         int plotHeight = Math.max(1, area.height - top - bottom);
-        long span = positiveMax - negativeMax;
-        if (span == 0)
-            span = 1;
-        int zeroY = top + (int) Math.round(positiveMax * (double) plotHeight / span);
+        int baselineY = plotY + plotHeight;
 
         gc.setForeground(Colors.GRAY);
-        gc.drawLine(left, zeroY, area.width - right, zeroY);
-        gc.drawLine(left, top, left, top + plotHeight);
-
+        gc.drawLine(plotX, baselineY, area.x + area.width - right, baselineY);
+        gc.drawLine(plotX, plotY, plotX, baselineY);
         gc.setForeground(Colors.theme().defaultForeground());
-        gc.drawText(Values.Money.format(Money.of(converter.getTermCurrency(), positiveMax)), 2, top - 8, true);
-        gc.drawText(Values.Money.format(Money.of(converter.getTermCurrency(), negativeMax)), 2,
-                        top + plotHeight - 8, true);
+        gc.drawText(Values.Money.format(Money.of(converter.getTermCurrency(), max)), area.x + 2, plotY - 8, true);
+        gc.drawText("0", area.x + 2, baselineY - 8, true);
 
         Color[] palette = { Colors.ICON_BLUE, Colors.ICON_ORANGE, Colors.ICON_GREEN, Colors.EQUITY,
                         Colors.OTHER_CATEGORY, Colors.DARK_BLUE };
         List<String> groupList = new ArrayList<>(groups);
-        int legendX = left;
+        int legendX = plotX;
         for (int i = 0; i < groupList.size(); i++)
         {
             gc.setBackground(palette[i % palette.length]);
-            gc.fillRectangle(legendX, 8, 12, 12);
+            gc.fillRectangle(legendX, area.y + 8, 12, 12);
             gc.setForeground(Colors.theme().defaultForeground());
-            gc.drawText(groupList.get(i), legendX + 17, 6, true);
+            gc.drawText(groupList.get(i), legendX + 17, area.y + 6, true);
             legendX += 25 + gc.textExtent(groupList.get(i)).x;
         }
 
@@ -514,44 +535,40 @@ public class ExposureManagementView extends AbstractFinanceView
         int bucketIndex = 0;
         for (Map.Entry<String, Map<String, Long>> bucket : values.entrySet())
         {
-            int centerX = left + (int) Math.round((bucketIndex + 0.5) * step);
+            int centerX = plotX + (int) Math.round((bucketIndex + 0.5) * step);
             int x = centerX - barWidth / 2;
-            int posY = zeroY;
-            int negY = zeroY;
+            int y = baselineY;
 
             for (int groupIndex = 0; groupIndex < groupList.size(); groupIndex++)
             {
                 long value = bucket.getValue().getOrDefault(groupList.get(groupIndex), 0L);
-                if (value == 0)
+                if (value <= 0)
                     continue;
-
-                int height = Math.max(1, (int) Math.round(Math.abs(value) * (double) plotHeight / span));
+                int height = Math.max(1, (int) Math.round(value * (double) plotHeight / max));
+                y -= height;
                 gc.setBackground(palette[groupIndex % palette.length]);
-                if (value > 0)
-                {
-                    posY -= height;
-                    gc.fillRectangle(x, posY, barWidth, height);
-                }
-                else
-                {
-                    gc.fillRectangle(x, negY, barWidth, height);
-                    negY += height;
-                }
+                gc.fillRectangle(x, y, barWidth, height);
             }
 
             gc.setForeground(Colors.theme().defaultForeground());
             String label = bucket.getKey();
-            int labelY = top + plotHeight + 8;
+            int labelY = baselineY + 8;
             if (byTradingSymbol)
             {
                 int maxLabelWidth = Math.max(24, (int) Math.floor(step * 1.8) - 8);
                 label = fitAxisLabel(gc, label, maxLabelWidth);
-                labelY += (bucketIndex % 2) * 20;
+                labelY += (bucketIndex % 2) * 18;
             }
             int textWidth = gc.textExtent(label).x;
             gc.drawText(label, centerX - textWidth / 2, labelY, true);
             bucketIndex++;
         }
+    }
+
+    private long chartValue(ExposureRow row, boolean absoluteValue)
+    {
+        long value = row.exposure().getAmount();
+        return absoluteValue ? Math.abs(value) : Math.max(0L, value);
     }
 
     private String fitAxisLabel(GC gc, String label, int maxWidth)
