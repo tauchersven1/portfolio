@@ -31,14 +31,10 @@ import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.TabFolder;
 import org.eclipse.swt.widgets.TabItem;
-import org.eclipse.swt.widgets.TabFolder;
-import org.eclipse.swt.widgets.TabItem;
 
-import name.abuchen.portfolio.model.Classification;
 import name.abuchen.portfolio.model.Classification;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
-import name.abuchen.portfolio.model.Taxonomy;
 import name.abuchen.portfolio.model.Taxonomy;
 import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.CurrencyConverter;
@@ -92,7 +88,6 @@ public class ExposureManagementView extends AbstractFinanceView
     private Label longValue;
     private Label shortValue;
     private Canvas chart;
-    private Canvas tradingSymbolChart;
     private Canvas tradingSymbolChart;
 
     private LocalDate valuationDate = LocalDate.now();
@@ -355,8 +350,6 @@ public class ExposureManagementView extends AbstractFinanceView
         chart.redraw();
         if (tradingSymbolChart != null && !tradingSymbolChart.isDisposed())
             tradingSymbolChart.redraw();
-        if (tradingSymbolChart != null && !tradingSymbolChart.isDisposed())
-            tradingSymbolChart.redraw();
     }
 
     private ExposureType selectedExposureType()
@@ -581,42 +574,6 @@ public class ExposureManagementView extends AbstractFinanceView
             case 2 -> row.underlying();
             default -> row.putCall();
         };
-    }
-
-    private String tradingSymbolLabel(Security security)
-    {
-        if (security == null)
-            return CASH;
-        String contractSymbol = property(security, "contractSymbol");
-        if (contractSymbol != null && !contractSymbol.isBlank())
-            return contractSymbol;
-        String ticker = security.getTickerSymbol();
-        return ticker == null || ticker.isBlank() ? "No trading symbol" : ticker;
-    }
-
-    private Security linkedUnderlying(Security derivative)
-    {
-        if (derivative == null)
-            return null;
-        String uuid = property(derivative, DerivativePositionCalculator.UNDERLYING_SECURITY_UUID);
-        if (uuid == null || uuid.isBlank())
-            return null;
-        return getClient().getSecurities().stream().filter(s -> uuid.equals(s.getUUID())).findFirst().orElse(null);
-    }
-
-    private Set<String> underlyingClassifications(Security derivative)
-    {
-        Security linked = linkedUnderlying(derivative);
-        if (linked == null)
-            return Set.of();
-
-        Set<String> answer = new LinkedHashSet<>();
-        for (Taxonomy taxonomy : getClient().getTaxonomies())
-        {
-            for (Classification classification : taxonomy.getClassifications(linked))
-                answer.add(taxonomy.getName() + ": " + classification.getName());
-        }
-        return answer;
     }
 
     private String tradingSymbolLabel(Security security)
