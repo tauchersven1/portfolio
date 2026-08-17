@@ -20,10 +20,9 @@ jobs:
           java-version: 21
           distribution: zulu
 
-      - name: Set up Maven 3.9.16
-        uses: stCarolas/setup-maven@v5
-        with:
-          maven-version: 3.9.16
+      - name: Verify Maven installation
+        shell: pwsh
+        run: mvn --version
 
       - name: Full build and tests
         shell: pwsh
