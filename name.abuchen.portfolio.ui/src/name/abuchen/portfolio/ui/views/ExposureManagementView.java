@@ -54,6 +54,7 @@ import name.abuchen.portfolio.ui.util.TimeMachineDropDown;
 public class ExposureManagementView extends AbstractFinanceView
 {
     private static final String ALL = "All";
+    private static final String TOTAL = "Total";
     private static final String OPEN_END = "Open End";
     private static final String NO_MATURITY = "No maturity";
     private static final String CASH = "Cash";
@@ -69,11 +70,13 @@ public class ExposureManagementView extends AbstractFinanceView
     private Combo exposureType;
     private Combo instrumentType;
     private Combo underlying;
+    private Combo tradingSymbol;
     private Combo putCall;
     private Combo direction;
     private Combo maturityRange;
     private Combo groupBy;
     private Combo currency;
+    private Combo totalBar;
 
     private Label grossValue;
     private Label netValue;
@@ -136,13 +139,14 @@ public class ExposureManagementView extends AbstractFinanceView
     {
         Group filters = new Group(parent, SWT.NONE);
         filters.setText("Filters");
-        GridLayoutFactory.fillDefaults().numColumns(8).margins(8, 8).spacing(8, 4).applyTo(filters);
+        GridLayoutFactory.fillDefaults().numColumns(10).margins(8, 8).spacing(8, 4).applyTo(filters);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(filters);
 
         exposureType = combo(filters, "Exposure type", "Delta adjusted", "Notional", "Market value");
         instrumentType = combo(filters, "Instrument type", ALL, "Derivatives", "Option", "Future",
                         "K.O. certificate", "Non-derivatives", CASH);
         underlying = combo(filters, "Underlying", ALL);
+        tradingSymbol = combo(filters, "Trading Symbol", ALL);
         putCall = combo(filters, "Put / Call", ALL, "Call", "Put", "Not specified");
         direction = combo(filters, "Direction", ALL, "Long", "Short");
         maturityRange = combo(filters, "Maturity range", "3M", "6M", "1Y", ALL);
@@ -151,9 +155,10 @@ public class ExposureManagementView extends AbstractFinanceView
         currency = combo(filters, "Currency", getClient().getBaseCurrency());
         getClient().getUsedCurrencies().stream().map(c -> c.getCurrencyCode()).sorted()
                         .filter(c -> currency.indexOf(c) < 0).forEach(currency::add);
+        totalBar = combo(filters, "Total bar", "Hide", "Show");
 
-        List.of(exposureType, instrumentType, underlying, putCall, direction, maturityRange, groupBy, currency)
-                        .forEach(c -> c.addListener(SWT.Selection, e -> refreshReport()));
+        List.of(exposureType, instrumentType, underlying, tradingSymbol, putCall, direction, maturityRange, groupBy,
+                        currency, totalBar).forEach(c -> c.addListener(SWT.Selection, e -> refreshReport()));
     }
 
     private Combo combo(Composite parent, String label, String... items)
@@ -210,10 +215,16 @@ public class ExposureManagementView extends AbstractFinanceView
         converter = new CurrencyConverterImpl(factory, reportingCurrency);
 
         ClientSnapshot snapshot = ClientSnapshot.create(filteredClient, converter, valuationDate);
-        rebuildUnderlyingFilter(snapshot);
+        rebuildSecurityFilters(snapshot);
         refreshRows(snapshot);
         refreshReport();
         updateTitle(getDefaultTitle() + " | " + Values.Date.format(valuationDate));
+    }
+
+    private void rebuildSecurityFilters(ClientSnapshot snapshot)
+    {
+        rebuildUnderlyingFilter(snapshot);
+        rebuildTradingSymbolFilter(snapshot);
     }
 
     private void rebuildUnderlyingFilter(ClientSnapshot snapshot)
@@ -231,6 +242,23 @@ public class ExposureManagementView extends AbstractFinanceView
         underlying.setItems(values.toArray(String[]::new));
         int index = underlying.indexOf(selected);
         underlying.select(index >= 0 ? index : 0);
+    }
+
+    private void rebuildTradingSymbolFilter(ClientSnapshot snapshot)
+    {
+        if (tradingSymbol == null)
+            return;
+
+        String selected = tradingSymbol.getText();
+        Set<String> values = new LinkedHashSet<>();
+        values.add(ALL);
+        snapshot.getAssetPositions().map(AssetPosition::getSecurity).filter(s -> s != null)
+                        .map(Security::getTickerSymbol).filter(s -> s != null && !s.isBlank())
+                        .sorted(String.CASE_INSENSITIVE_ORDER).forEach(values::add);
+
+        tradingSymbol.setItems(values.toArray(String[]::new));
+        int index = tradingSymbol.indexOf(selected);
+        tradingSymbol.select(index >= 0 ? index : 0);
     }
 
     private void refreshRows(ClientSnapshot snapshot)
@@ -323,6 +351,9 @@ public class ExposureManagementView extends AbstractFinanceView
 
         if (!ALL.equals(underlying.getText()) && !underlying.getText().equals(row.underlying()))
             return false;
+        if (!ALL.equals(tradingSymbol.getText())
+                        && (cash || !tradingSymbol.getText().equals(row.security().getTickerSymbol())))
+            return false;
         if (!ALL.equals(putCall.getText()) && !putCall.getText().equals(row.putCall()))
             return false;
         if ("Long".equals(direction.getText()) && !row.exposure().isPositive())
@@ -360,6 +391,13 @@ public class ExposureManagementView extends AbstractFinanceView
         }
 
         Map<String, Map<String, Long>> values = new LinkedHashMap<>();
+        if (totalBar != null && totalBar.getSelectionIndex() == 1)
+        {
+            Map<String, Long> total = new LinkedHashMap<>();
+            filtered.forEach(row -> total.merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
+            values.put(TOTAL, total);
+        }
+
         filtered.stream().sorted(Comparator.comparing(this::maturitySortKey)).forEach(row -> values
                         .computeIfAbsent(row.maturity(), k -> new LinkedHashMap<>())
                         .merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
