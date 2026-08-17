@@ -156,6 +156,7 @@ public class SecurityMultiplierPage extends AbstractPage
         parametersTab.setControl(riskParameters);
 
         loadDerivativeData();
+        updateDeltaDefaultForPutCall();
         updateDerivativeControls();
 
         setControl(container);
@@ -236,6 +237,14 @@ public class SecurityMultiplierPage extends AbstractPage
         putCall = new Combo(optionGroup, SWT.READ_ONLY);
         putCall.setItems("Not specified", "Call", "Put");
         putCall.select(0);
+        putCall.addSelectionListener(new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                updateDeltaDefaultForPutCall();
+            }
+        });
 
         new Label(optionGroup, SWT.NONE).setText("Strike");
         strike = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
@@ -405,8 +414,8 @@ public class SecurityMultiplierPage extends AbstractPage
         GridDataFactory.fillDefaults().grab(true, true).applyTo(deltaGroup);
 
         Label explanation = new Label(deltaGroup, SWT.WRAP);
-        explanation.setText(
-                        "Delta is effective from its date until the next entry. Before the first entry, Delta is 1.0. Standard option deltas must be between -1.0 and 1.0.");
+        explanation.setText("Delta is effective from its date until the next entry. Calls default to +1.0 and puts to -1.0. "
+                        + "Standard option deltas must be between -1.0 and 1.0.");
         GridDataFactory.fillDefaults().grab(true, false).applyTo(explanation);
 
         deltaViewer = new TableViewer(deltaGroup, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
@@ -452,7 +461,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         new Label(editor, SWT.NONE).setText("Delta");
         deltaValue = new Text(editor, SWT.BORDER | SWT.RIGHT);
-        deltaValue.setText("1.0");
+        deltaValue.setText(Double.toString(SecurityDelta.getDefaultDelta(security)));
         GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(deltaValue);
 
         Button addOrReplace = new Button(editor, SWT.PUSH);
@@ -482,6 +491,8 @@ public class SecurityMultiplierPage extends AbstractPage
                 {
                     deltas.remove(selection.getFirstElement());
                     deltaViewer.refresh();
+                    deltaViewer.setSelection(StructuredSelection.EMPTY);
+                    updateDeltaDefaultForPutCall();
                 }
             }
         });
@@ -498,6 +509,8 @@ public class SecurityMultiplierPage extends AbstractPage
                 {
                     deltas.clear();
                     deltaViewer.refresh();
+                    deltaViewer.setSelection(StructuredSelection.EMPTY);
+                    updateDeltaDefaultForPutCall();
                 }
             }
         });
@@ -640,39 +653,6 @@ public class SecurityMultiplierPage extends AbstractPage
         }
     }
 
-    private LocalDate earliestTransactionDate()
-    {
-        return security.getTransactions(client).stream()
-                        .map(pair -> pair.getTransaction().getDateTime().toLocalDate())
-                        .min(LocalDate::compareTo).orElse(LocalDate.now());
-    }
-
-    private void updateUnderlyingSuggestions()
-    {
-        if (underlying == null || updatingUnderlyingSuggestions)
-            return;
-
-        String typed = underlying.getText();
-        String search = typed.trim().toLowerCase(Locale.ROOT);
-        String[] matches = underlyingSecurities.keySet().stream()
-                        .filter(label -> search.isEmpty() || label.toLowerCase(Locale.ROOT).contains(search))
-                        .toArray(String[]::new);
-
-        updatingUnderlyingSuggestions = true;
-        try
-        {
-            underlying.setItems(matches);
-            underlying.setText(typed);
-            underlying.setSelection(new org.eclipse.swt.graphics.Point(typed.length(), typed.length()));
-            if (!search.isEmpty() && matches.length > 0)
-                underlying.setListVisible(true);
-        }
-        finally
-        {
-            updatingUnderlyingSuggestions = false;
-        }
-    }
-
     private void loadDerivativeData()
     {
         selectByValue(derivativeType, property(TYPE), "FUTURE", "OPTION");
@@ -733,6 +713,16 @@ public class SecurityMultiplierPage extends AbstractPage
             initialKnockoutLevel.setEnabled(isKnockout);
         if (knockoutLevelGroup != null)
             setEnabledRecursive(knockoutLevelGroup, isKnockout);
+    }
+
+    private void updateDeltaDefaultForPutCall()
+    {
+        if (deltaValue == null || deltaValue.isDisposed())
+            return;
+        if (deltaViewer != null && !deltaViewer.getStructuredSelection().isEmpty())
+            return;
+
+        deltaValue.setText(putCall != null && putCall.getSelectionIndex() == 2 ? "-1.0" : "1.0");
     }
 
     private void loadMultiplierSelection()
@@ -803,6 +793,11 @@ public class SecurityMultiplierPage extends AbstractPage
             showInvalidDelta();
             return;
         }
+
+        if (putCall.getSelectionIndex() == 2 && value > 0 && !MessageDialog.openConfirm(getShell(),
+                        "Positive Delta for put option",
+                        "Put options normally have a negative Delta. Store this positive Delta anyway?"))
+            return;
 
         SecurityDelta replacement = SecurityDelta.of(getDeltaDate(), value);
         int index = Collections.binarySearch(deltas, replacement);
