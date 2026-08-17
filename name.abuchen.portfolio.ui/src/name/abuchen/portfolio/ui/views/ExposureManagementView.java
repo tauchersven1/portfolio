@@ -31,18 +31,10 @@ import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.TabFolder;
 import org.eclipse.swt.widgets.TabItem;
-import org.eclipse.swt.widgets.TabFolder;
-import org.eclipse.swt.widgets.TabItem;
-import org.eclipse.swt.widgets.TabFolder;
-import org.eclipse.swt.widgets.TabItem;
 
-import name.abuchen.portfolio.model.Classification;
-import name.abuchen.portfolio.model.Classification;
 import name.abuchen.portfolio.model.Classification;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
-import name.abuchen.portfolio.model.Taxonomy;
-import name.abuchen.portfolio.model.Taxonomy;
 import name.abuchen.portfolio.model.Taxonomy;
 import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.CurrencyConverter;
@@ -96,8 +88,6 @@ public class ExposureManagementView extends AbstractFinanceView
     private Label longValue;
     private Label shortValue;
     private Canvas chart;
-    private Canvas tradingSymbolChart;
-    private Canvas tradingSymbolChart;
     private Canvas tradingSymbolChart;
 
     private LocalDate valuationDate = LocalDate.now();
@@ -360,10 +350,6 @@ public class ExposureManagementView extends AbstractFinanceView
         chart.redraw();
         if (tradingSymbolChart != null && !tradingSymbolChart.isDisposed())
             tradingSymbolChart.redraw();
-        if (tradingSymbolChart != null && !tradingSymbolChart.isDisposed())
-            tradingSymbolChart.redraw();
-        if (tradingSymbolChart != null && !tradingSymbolChart.isDisposed())
-            tradingSymbolChart.redraw();
     }
 
     private ExposureType selectedExposureType()
@@ -492,7 +478,7 @@ public class ExposureManagementView extends AbstractFinanceView
         int left = 90;
         int right = 20;
         int top = 44;
-        int bottom = 55;
+        int bottom = byTradingSymbol ? 78 : 55;
         int plotWidth = Math.max(1, area.width - left - right);
         int plotHeight = Math.max(1, area.height - top - bottom);
         long span = positiveMax - negativeMax;
@@ -528,7 +514,8 @@ public class ExposureManagementView extends AbstractFinanceView
         int bucketIndex = 0;
         for (Map.Entry<String, Map<String, Long>> bucket : values.entrySet())
         {
-            int x = left + (int) Math.round((bucketIndex + 0.5) * step) - barWidth / 2;
+            int centerX = left + (int) Math.round((bucketIndex + 0.5) * step);
+            int x = centerX - barWidth / 2;
             int posY = zeroY;
             int negY = zeroY;
 
@@ -554,10 +541,29 @@ public class ExposureManagementView extends AbstractFinanceView
 
             gc.setForeground(Colors.theme().defaultForeground());
             String label = bucket.getKey();
+            int labelY = top + plotHeight + 8;
+            if (byTradingSymbol)
+            {
+                int maxLabelWidth = Math.max(24, (int) Math.floor(step * 1.8) - 8);
+                label = fitAxisLabel(gc, label, maxLabelWidth);
+                labelY += (bucketIndex % 2) * 20;
+            }
             int textWidth = gc.textExtent(label).x;
-            gc.drawText(label, x + (barWidth - textWidth) / 2, top + plotHeight + 8, true);
+            gc.drawText(label, centerX - textWidth / 2, labelY, true);
             bucketIndex++;
         }
+    }
+
+    private String fitAxisLabel(GC gc, String label, int maxWidth)
+    {
+        if (gc.textExtent(label).x <= maxWidth)
+            return label;
+
+        String suffix = "...";
+        int length = label.length();
+        while (length > 1 && gc.textExtent(label.substring(0, length) + suffix).x > maxWidth)
+            length--;
+        return label.substring(0, length) + suffix;
     }
 
     private String groupLabel(ExposureRow row)
@@ -568,78 +574,6 @@ public class ExposureManagementView extends AbstractFinanceView
             case 2 -> row.underlying();
             default -> row.putCall();
         };
-    }
-
-    private String tradingSymbolLabel(Security security)
-    {
-        if (security == null)
-            return CASH;
-        String contractSymbol = property(security, "contractSymbol");
-        if (contractSymbol != null && !contractSymbol.isBlank())
-            return contractSymbol;
-        String ticker = security.getTickerSymbol();
-        return ticker == null || ticker.isBlank() ? "No trading symbol" : ticker;
-    }
-
-    private Security linkedUnderlying(Security derivative)
-    {
-        if (derivative == null)
-            return null;
-        String uuid = property(derivative, DerivativePositionCalculator.UNDERLYING_SECURITY_UUID);
-        if (uuid == null || uuid.isBlank())
-            return null;
-        return getClient().getSecurities().stream().filter(s -> uuid.equals(s.getUUID())).findFirst().orElse(null);
-    }
-
-    private Set<String> underlyingClassifications(Security derivative)
-    {
-        Security linked = linkedUnderlying(derivative);
-        if (linked == null)
-            return Set.of();
-
-        Set<String> answer = new LinkedHashSet<>();
-        for (Taxonomy taxonomy : getClient().getTaxonomies())
-        {
-            for (Classification classification : taxonomy.getClassifications(linked))
-                answer.add(taxonomy.getName() + ": " + classification.getName());
-        }
-        return answer;
-    }
-
-    private String tradingSymbolLabel(Security security)
-    {
-        if (security == null)
-            return CASH;
-        String contractSymbol = property(security, "contractSymbol");
-        if (contractSymbol != null && !contractSymbol.isBlank())
-            return contractSymbol;
-        String ticker = security.getTickerSymbol();
-        return ticker == null || ticker.isBlank() ? "No trading symbol" : ticker;
-    }
-
-    private Security linkedUnderlying(Security derivative)
-    {
-        if (derivative == null)
-            return null;
-        String uuid = property(derivative, DerivativePositionCalculator.UNDERLYING_SECURITY_UUID);
-        if (uuid == null || uuid.isBlank())
-            return null;
-        return getClient().getSecurities().stream().filter(s -> uuid.equals(s.getUUID())).findFirst().orElse(null);
-    }
-
-    private Set<String> underlyingClassifications(Security derivative)
-    {
-        Security linked = linkedUnderlying(derivative);
-        if (linked == null)
-            return Set.of();
-
-        Set<String> answer = new LinkedHashSet<>();
-        for (Taxonomy taxonomy : getClient().getTaxonomies())
-        {
-            for (Classification classification : taxonomy.getClassifications(linked))
-                answer.add(taxonomy.getName() + ": " + classification.getName());
-        }
-        return answer;
     }
 
     private String tradingSymbolLabel(Security security)
