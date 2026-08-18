@@ -1,6 +1,7 @@
 package name.abuchen.portfolio.snapshot;
 
 import java.time.LocalDate;
+import java.util.Locale;
 
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
@@ -101,33 +102,54 @@ public final class ExposureCalculator
     private static Money calculateFxKnockoutExposure(SecurityPosition position, Security security, LocalDate date,
                     ExposureType exposureType)
     {
-        String exposureCurrency = security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, FX_BASE_CURRENCY)
-                        .filter(value -> !value.isBlank()).orElse(security.getCurrencyCode());
+        String baseCurrency = normalizeCurrency(
+                        security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, FX_BASE_CURRENCY).orElse(null));
+        String quoteCurrency = normalizeCurrency(
+                        security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, FX_QUOTE_CURRENCY).orElse(null));
+
+        if (baseCurrency == null || quoteCurrency == null || baseCurrency.equals(quoteCurrency))
+            return null;
 
         double factor = getSubscriptionRatio(security, date);
+        if (!Double.isFinite(factor) || factor <= 0)
+            return null;
+
         if (exposureType == ExposureType.DELTA_ADJUSTED)
             factor *= SecurityDelta.getDelta(security, date);
         else
             factor *= SecurityDelta.getDefaultDelta(security);
 
         return DerivativePositionCalculator.valueOf(position.getShares(), Values.Quote.factorize(1.0), factor,
-                        exposureCurrency);
+                        baseCurrency);
     }
 
     private static double getSubscriptionRatio(Security security, LocalDate date)
     {
         String value = security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, SUBSCRIPTION_RATIO).orElse(null);
-        if (value == null || value.isBlank())
-            return security.getMultiplier(date);
+        if (value != null && !value.isBlank())
+        {
+            try
+            {
+                double parsed = Double.parseDouble(value.trim().replace(',', '.'));
+                if (Double.isFinite(parsed) && parsed > 0)
+                    return parsed;
+            }
+            catch (NumberFormatException e)
+            {
+                // Fall back to the historical multiplier for legacy or malformed data.
+            }
+        }
 
-        try
-        {
-            return Double.parseDouble(value.trim().replace(',', '.'));
-        }
-        catch (NumberFormatException e)
-        {
-            return security.getMultiplier(date);
-        }
+        return security.getMultiplier(date);
+    }
+
+    private static String normalizeCurrency(String value)
+    {
+        if (value == null)
+            return null;
+
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        return normalized.matches("[A-Z]{3}") ? normalized : null; //$NON-NLS-1$
     }
 
     public static boolean isKnockoutCertificate(Security security)
