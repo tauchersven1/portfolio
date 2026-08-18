@@ -98,6 +98,8 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
                 if (location.isPresent())
                 {
                     URI uri = URI.create(location.get());
+                    if (uri.getHost() == null && uri.getPath() != null && !uri.getPath().isBlank())
+                        return new WebAccess("markets.vontobel.com", uri.getPath()).get();
                     if ("markets.vontobel.com".equalsIgnoreCase(uri.getHost()))
                         return new WebAccess(uri.getHost(), uri.getPath()).get();
                 }
