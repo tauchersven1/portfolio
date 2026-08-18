@@ -60,6 +60,12 @@ public class SecurityMultiplierPage extends AbstractPage
     private static final String EXERCISE_STYLE = "exerciseStyle";
     private static final String OPTION_PRODUCT_TYPE = "optionProductType";
     private static final String INITIAL_KNOCKOUT_LEVEL = "initialKnockoutLevel";
+    private static final String ISSUER = "issuer";
+    private static final String ISSUER_PRODUCT_ID = "issuerProductId";
+    private static final String SUBSCRIPTION_RATIO = "subscriptionRatio";
+    private static final String FX_UNDERLYING = "fxUnderlying";
+    private static final String FX_BASE_CURRENCY = "fxBaseCurrency";
+    private static final String FX_QUOTE_CURRENCY = "fxQuoteCurrency";
 
     private static final String CONTRACT_MONTH = "contractMonth";
     private static final String FIRST_NOTICE_DAY = "firstNoticeDay";
@@ -68,7 +74,8 @@ public class SecurityMultiplierPage extends AbstractPage
     private static final String[] DERIVATIVE_PROPERTIES = { TYPE, UNDERLYING, UNDERLYING_SECURITY_UUID,
                     FIRST_TRADING_DAY, EXPIRATION_DATE, LAST_TRADING_DAY, SETTLEMENT_TYPE, SETTLEMENT_DATE, EXCHANGE,
                     CONTRACT_SYMBOL, CONTRACT_SIZE, TICK_SIZE, PUT_CALL, STRIKE, EXERCISE_STYLE, OPTION_PRODUCT_TYPE,
-                    INITIAL_KNOCKOUT_LEVEL, CONTRACT_MONTH, FIRST_NOTICE_DAY, FINAL_SETTLEMENT_DATE };
+                    INITIAL_KNOCKOUT_LEVEL, ISSUER, ISSUER_PRODUCT_ID, SUBSCRIPTION_RATIO, FX_UNDERLYING,
+                    FX_BASE_CURRENCY, FX_QUOTE_CURRENCY, CONTRACT_MONTH, FIRST_NOTICE_DAY, FINAL_SETTLEMENT_DATE };
 
     private final Client client;
     private final Security security;
@@ -97,6 +104,13 @@ public class SecurityMultiplierPage extends AbstractPage
     private Combo optionProductType;
     private Label initialKnockoutLevelLabel;
     private Text initialKnockoutLevel;
+    private Group knockoutDetailsGroup;
+    private Text issuer;
+    private Text issuerProductId;
+    private Text subscriptionRatio;
+    private Button fxUnderlying;
+    private Text fxBaseCurrency;
+    private Text fxQuoteCurrency;
 
     private Group futureGroup;
     private Text contractMonth;
@@ -272,6 +286,48 @@ public class SecurityMultiplierPage extends AbstractPage
         initialKnockoutLevelLabel.setText("Initial K.O. level");
         initialKnockoutLevel = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
         GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(initialKnockoutLevel);
+
+        knockoutDetailsGroup = new Group(optionGroup, SWT.NONE);
+        knockoutDetailsGroup.setText("K.O. certificate details");
+        GridLayoutFactory.fillDefaults().numColumns(4).margins(8, 8).spacing(8, 6).applyTo(knockoutDetailsGroup);
+        GridDataFactory.fillDefaults().grab(true, false).span(4, 1).applyTo(knockoutDetailsGroup);
+
+        new Label(knockoutDetailsGroup, SWT.NONE).setText("Issuer");
+        issuer = new Text(knockoutDetailsGroup, SWT.BORDER);
+        GridDataFactory.fillDefaults().grab(true, false).applyTo(issuer);
+
+        new Label(knockoutDetailsGroup, SWT.NONE).setText("Issuer product ID");
+        issuerProductId = new Text(knockoutDetailsGroup, SWT.BORDER);
+        GridDataFactory.fillDefaults().grab(true, false).applyTo(issuerProductId);
+
+        new Label(knockoutDetailsGroup, SWT.NONE).setText("Subscription ratio");
+        subscriptionRatio = new Text(knockoutDetailsGroup, SWT.BORDER | SWT.RIGHT);
+        subscriptionRatio.setToolTipText("Base units represented by one certificate, e.g. 100 for a EUR/JPY turbo representing 100 EUR.");
+        GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(subscriptionRatio);
+
+        new Label(knockoutDetailsGroup, SWT.NONE).setText("FX Underlying");
+        fxUnderlying = new Button(knockoutDetailsGroup, SWT.CHECK);
+        fxUnderlying.setText("Currency pair");
+        fxUnderlying.addSelectionListener(new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                updateFxUnderlyingControls();
+            }
+        });
+
+        new Label(knockoutDetailsGroup, SWT.NONE).setText("Base currency");
+        fxBaseCurrency = new Text(knockoutDetailsGroup, SWT.BORDER);
+        fxBaseCurrency.setTextLimit(3);
+        fxBaseCurrency.setToolTipText("ISO currency code of the base currency, e.g. EUR in EUR/JPY.");
+        GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(fxBaseCurrency);
+
+        new Label(knockoutDetailsGroup, SWT.NONE).setText("Quote currency");
+        fxQuoteCurrency = new Text(knockoutDetailsGroup, SWT.BORDER);
+        fxQuoteCurrency.setTextLimit(3);
+        fxQuoteCurrency.setToolTipText("ISO currency code of the quote currency, e.g. JPY in EUR/JPY.");
+        GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(fxQuoteCurrency);
 
         futureGroup = new Group(container, SWT.NONE);
         futureGroup.setText("Future");
@@ -674,6 +730,12 @@ public class SecurityMultiplierPage extends AbstractPage
         tickSize.setText(valueOrEmpty(property(TICK_SIZE)));
         strike.setText(valueOrEmpty(property(STRIKE)));
         initialKnockoutLevel.setText(valueOrEmpty(property(INITIAL_KNOCKOUT_LEVEL)));
+        issuer.setText(valueOrEmpty(property(ISSUER)));
+        issuerProductId.setText(valueOrEmpty(property(ISSUER_PRODUCT_ID)));
+        subscriptionRatio.setText(valueOrEmpty(property(SUBSCRIPTION_RATIO)));
+        fxUnderlying.setSelection("true".equalsIgnoreCase(property(FX_UNDERLYING)));
+        fxBaseCurrency.setText(valueOrEmpty(property(FX_BASE_CURRENCY)));
+        fxQuoteCurrency.setText(valueOrEmpty(property(FX_QUOTE_CURRENCY)));
         contractMonth.setText(valueOrEmpty(property(CONTRACT_MONTH)));
 
         firstTradingDay.setValue(property(FIRST_TRADING_DAY));
@@ -711,8 +773,23 @@ public class SecurityMultiplierPage extends AbstractPage
             initialKnockoutLevelLabel.setEnabled(isKnockout);
         if (initialKnockoutLevel != null)
             initialKnockoutLevel.setEnabled(isKnockout);
+        if (knockoutDetailsGroup != null)
+            setEnabledRecursive(knockoutDetailsGroup, isKnockout);
         if (knockoutLevelGroup != null)
             setEnabledRecursive(knockoutLevelGroup, isKnockout);
+
+        updateFxUnderlyingControls();
+    }
+
+    private void updateFxUnderlyingControls()
+    {
+        boolean isKnockout = derivativeType != null && derivativeType.getSelectionIndex() == 2
+                        && optionProductType != null && optionProductType.getSelectionIndex() == 2;
+        boolean enabled = isKnockout && fxUnderlying != null && fxUnderlying.getSelection();
+        if (fxBaseCurrency != null)
+            fxBaseCurrency.setEnabled(enabled);
+        if (fxQuoteCurrency != null)
+            fxQuoteCurrency.setEnabled(enabled);
     }
 
     private void updateDeltaDefaultForPutCall()
@@ -936,6 +1013,14 @@ public class SecurityMultiplierPage extends AbstractPage
 
             boolean isKnockout = optionProductType.getSelectionIndex() == 2;
             setProperty(INITIAL_KNOCKOUT_LEVEL, isKnockout ? text(initialKnockoutLevel) : null);
+            setProperty(ISSUER, isKnockout ? text(issuer) : null);
+            setProperty(ISSUER_PRODUCT_ID, isKnockout ? text(issuerProductId) : null);
+            setProperty(SUBSCRIPTION_RATIO, isKnockout ? text(subscriptionRatio) : null);
+
+            boolean isFxUnderlying = isKnockout && fxUnderlying.getSelection();
+            setProperty(FX_UNDERLYING, isFxUnderlying ? "true" : null);
+            setProperty(FX_BASE_CURRENCY, isFxUnderlying ? upper(text(fxBaseCurrency)) : null);
+            setProperty(FX_QUOTE_CURRENCY, isFxUnderlying ? upper(text(fxQuoteCurrency)) : null);
             SecurityKnockoutLevel.replaceAll(security, isKnockout ? knockoutLevels : Collections.emptyList());
 
             setProperty(CONTRACT_MONTH, null);
@@ -948,6 +1033,12 @@ public class SecurityMultiplierPage extends AbstractPage
             setProperty(EXERCISE_STYLE, null);
             setProperty(OPTION_PRODUCT_TYPE, null);
             setProperty(INITIAL_KNOCKOUT_LEVEL, null);
+            setProperty(ISSUER, null);
+            setProperty(ISSUER_PRODUCT_ID, null);
+            setProperty(SUBSCRIPTION_RATIO, null);
+            setProperty(FX_UNDERLYING, null);
+            setProperty(FX_BASE_CURRENCY, null);
+            setProperty(FX_QUOTE_CURRENCY, null);
             SecurityKnockoutLevel.replaceAll(security, Collections.emptyList());
 
             setProperty(CONTRACT_MONTH, text(contractMonth));
@@ -976,6 +1067,11 @@ public class SecurityMultiplierPage extends AbstractPage
     {
         String value = control.getText().trim();
         return value.isEmpty() ? null : value;
+    }
+
+    private static String upper(String value)
+    {
+        return value == null ? null : value.toUpperCase(Locale.ROOT);
     }
 
     private static String underlyingLabel(Security security)
