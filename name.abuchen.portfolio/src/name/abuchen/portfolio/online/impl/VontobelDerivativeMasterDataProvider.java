@@ -56,7 +56,7 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
         if (identifier == null)
             return Optional.empty();
 
-        IOException last = null;
+        WebAccessException last = null;
         for (String path : PRODUCT_PATHS)
         {
             try
@@ -79,7 +79,7 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
             }
         }
 
-        if (last instanceof WebAccessException web && web.getHttpErrorCode() >= 500)
+        if (last != null && last.getHttpErrorCode() >= 500)
             throw last;
         return Optional.empty();
     }
