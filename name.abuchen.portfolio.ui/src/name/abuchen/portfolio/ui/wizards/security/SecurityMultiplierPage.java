@@ -1,5 +1,6 @@
 package name.abuchen.portfolio.ui.wizards.security;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -38,6 +39,8 @@ import name.abuchen.portfolio.model.SecurityKnockoutLevel;
 import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.Values;
+import name.abuchen.portfolio.online.DerivativeMasterDataLookup;
+import name.abuchen.portfolio.online.DerivativeMasterDataProvider.Result;
 
 @SuppressWarnings("nls")
 public class SecurityMultiplierPage extends AbstractPage
@@ -172,6 +175,7 @@ public class SecurityMultiplierPage extends AbstractPage
         loadDerivativeData();
         updateDeltaDefaultForPutCall();
         updateDerivativeControls();
+        completeDerivativeMasterData(false);
 
         setControl(container);
     }
@@ -179,7 +183,7 @@ public class SecurityMultiplierPage extends AbstractPage
     private void createDerivativeMasterData(Composite container)
     {
         Composite typeRow = new Composite(container, SWT.NONE);
-        GridLayoutFactory.fillDefaults().numColumns(2).spacing(8, 0).applyTo(typeRow);
+        GridLayoutFactory.fillDefaults().numColumns(3).spacing(8, 0).applyTo(typeRow);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(typeRow);
 
         new Label(typeRow, SWT.NONE).setText("Derivative type");
@@ -192,6 +196,18 @@ public class SecurityMultiplierPage extends AbstractPage
             public void widgetSelected(SelectionEvent e)
             {
                 updateDerivativeControls();
+            }
+        });
+
+        Button completeMasterData = new Button(typeRow, SWT.PUSH);
+        completeMasterData.setText("Complete from ISIN / WKN");
+        completeMasterData.setToolTipText("Fill empty derivative fields from an online product provider. Existing values are never overwritten.");
+        completeMasterData.addSelectionListener(new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent e)
+            {
+                completeDerivativeMasterData(true);
             }
         });
 
@@ -971,6 +987,147 @@ public class SecurityMultiplierPage extends AbstractPage
             knockoutLevelEffectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth());
     }
 
+    private void completeDerivativeMasterData(boolean showMessages)
+    {
+        if ((security.getIsin() == null || security.getIsin().isBlank())
+                        && (security.getWkn() == null || security.getWkn().isBlank()))
+        {
+            if (showMessages)
+                MessageDialog.openInformation(getShell(), "Derivative master data",
+                                "Enter an ISIN or WKN in the security master data first.");
+            return;
+        }
+
+        if (!showMessages && !hasEmptyLookupTargets())
+            return;
+
+        try
+        {
+            var result = DerivativeMasterDataLookup.lookup(security);
+            if (result.isEmpty())
+            {
+                if (showMessages)
+                    MessageDialog.openInformation(getShell(), "Derivative master data",
+                                    "No supported product data was found for the ISIN/WKN.");
+                return;
+            }
+
+            applyLookupResult(result.get());
+            updateDeltaDefaultForPutCall();
+            updateDerivativeControls();
+        }
+        catch (IOException e)
+        {
+            if (showMessages)
+                MessageDialog.openError(getShell(), "Derivative master data",
+                                "Unable to load product data: " + e.getMessage());
+        }
+    }
+
+    private boolean hasEmptyLookupTargets()
+    {
+        return derivativeType.getSelectionIndex() == 0 || comboText(underlying) == null || putCall.getSelectionIndex() == 0
+                        || text(strike) == null || optionProductType.getSelectionIndex() == 0
+                        || text(initialKnockoutLevel) == null || text(issuer) == null || text(subscriptionRatio) == null
+                        || !fxUnderlying.getSelection() || text(fxBaseCurrency) == null || text(fxQuoteCurrency) == null
+                        || firstTradingDay.getValue() == null || expirationDate.getValue() == null
+                        || lastTradingDay.getValue() == null || settlementDate.getValue() == null;
+    }
+
+    private void applyLookupResult(Result result)
+    {
+        applyComboIfEmpty(derivativeType, result.get(TYPE), "FUTURE", "OPTION");
+        applyComboIfEmpty(putCall, result.get(PUT_CALL), "CALL", "PUT");
+        applyComboIfEmpty(optionProductType, result.get(OPTION_PRODUCT_TYPE), "VANILLA", "KNOCK_OUT_CERTIFICATE");
+
+        applyComboTextIfEmpty(underlying, result.get(UNDERLYING));
+        applyTextIfEmpty(strike, result.get(STRIKE));
+        applyTextIfEmpty(initialKnockoutLevel, result.get(INITIAL_KNOCKOUT_LEVEL));
+        applyTextIfEmpty(issuer, result.get(ISSUER));
+        applyTextIfEmpty(subscriptionRatio, result.get(SUBSCRIPTION_RATIO));
+
+        if (!fxUnderlying.getSelection() && "true".equalsIgnoreCase(result.get(FX_UNDERLYING)))
+        {
+            fxUnderlying.setSelection(true);
+            markAutoFilled(fxUnderlying);
+        }
+        applyTextIfEmpty(fxBaseCurrency, result.get(FX_BASE_CURRENCY));
+        applyTextIfEmpty(fxQuoteCurrency, result.get(FX_QUOTE_CURRENCY));
+
+        applyDateIfEmpty(firstTradingDay, result.get(FIRST_TRADING_DAY));
+        applyDateIfEmpty(expirationDate, result.get(EXPIRATION_DATE));
+        applyDateIfEmpty(lastTradingDay, result.get(LAST_TRADING_DAY));
+        applyDateIfEmpty(settlementDate, result.get(SETTLEMENT_DATE));
+
+        String currentKo = result.get("currentKnockoutLevel");
+        if (knockoutLevels.isEmpty() && currentKo != null)
+        {
+            try
+            {
+                double level = Double.parseDouble(currentKo.replace(',', '.'));
+                if (Double.isFinite(level) && level > 0)
+                {
+                    knockoutLevels.add(SecurityKnockoutLevel.of(LocalDate.now(), level));
+                    knockoutLevelViewer.refresh();
+                    knockoutLevelViewer.getControl().setForeground(
+                                    knockoutLevelViewer.getControl().getDisplay().getSystemColor(SWT.COLOR_RED));
+                }
+            }
+            catch (NumberFormatException e)
+            {
+                // Ignore malformed optional provider values.
+            }
+        }
+    }
+
+    private void applyTextIfEmpty(Text control, String value)
+    {
+        if (text(control) == null && value != null && !value.isBlank())
+        {
+            control.setText(value);
+            markAutoFilled(control);
+        }
+    }
+
+    private void applyComboTextIfEmpty(Combo control, String value)
+    {
+        if (comboText(control) == null && value != null && !value.isBlank())
+        {
+            control.setText(value);
+            markAutoFilled(control);
+        }
+    }
+
+    private void applyComboIfEmpty(Combo combo, String value, String... values)
+    {
+        if (combo.getSelectionIndex() != 0 || value == null)
+            return;
+        for (int ii = 0; ii < values.length; ii++)
+        {
+            if (values[ii].equals(value))
+            {
+                combo.select(ii + 1);
+                markAutoFilled(combo);
+                return;
+            }
+        }
+    }
+
+    private void applyDateIfEmpty(OptionalDateField field, String value)
+    {
+        if (field.getValue() == null && value != null && !value.isBlank())
+        {
+            field.setValue(value);
+            markAutoFilled(field.enabled);
+            markAutoFilled(field.date);
+        }
+    }
+
+    private static void markAutoFilled(Control control)
+    {
+        control.setForeground(control.getDisplay().getSystemColor(SWT.COLOR_RED));
+    }
+
     private boolean validateKnockoutMasterData()
     {
         boolean isKnockout = derivativeType.getSelectionIndex() == 2 && optionProductType.getSelectionIndex() == 2;
@@ -1031,6 +1188,17 @@ public class SecurityMultiplierPage extends AbstractPage
                             "Base currency and quote currency must be different.");
             fxQuoteCurrency.setFocus();
             fxQuoteCurrency.selectAll();
+            return false;
+        }
+
+        String[] pair = parseFxPair(comboText(underlying));
+        if (pair != null && (!pair[0].equals(base) || !pair[1].equals(quote)))
+        {
+            MessageDialog.openError(getShell(), "Currency pair does not match underlying",
+                            "The FX underlying is " + pair[0] + "/" + pair[1] + ". Use " + pair[0]
+                                            + " as base currency and " + pair[1] + " as quote currency.");
+            fxBaseCurrency.setFocus();
+            fxBaseCurrency.selectAll();
             return false;
         }
 
@@ -1145,6 +1313,18 @@ public class SecurityMultiplierPage extends AbstractPage
     private static String normalizeDecimal(String value)
     {
         return value == null ? null : value.replace(',', '.');
+    }
+
+    private static String[] parseFxPair(String value)
+    {
+        if (value == null || value.isBlank())
+            return null;
+
+        var matcher = java.util.regex.Pattern.compile("(?i)([A-Z]{3})\\s*/\\s*([A-Z]{3})").matcher(value);
+        if (!matcher.find())
+            return null;
+
+        return new String[] { matcher.group(1).toUpperCase(Locale.ROOT), matcher.group(2).toUpperCase(Locale.ROOT) };
     }
 
     private static String underlyingLabel(Security security)
