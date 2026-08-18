@@ -88,7 +88,11 @@ public final class ExposureCalculator
             return converter.convert(date, position.calculateValue(date));
         }
 
-        double factor = security.getMultiplier(date);
+        double factor = isKnockoutCertificate(security) ? getSubscriptionRatio(security, date)
+                        : security.getMultiplier(date);
+        if (!Double.isFinite(factor) || factor <= 0)
+            return null;
+
         if (exposureType == ExposureType.DELTA_ADJUSTED)
             factor *= SecurityDelta.getDelta(security, date);
         else if (exposureType == ExposureType.NOTIONAL && DerivativePositionCalculator.OPTION.equals(derivativeType))
