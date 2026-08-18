@@ -8,6 +8,7 @@ on:
       - agent/exposure-total-trading-symbol
       - agent/total-bar-default-show
 
+# Rebuild marker: package the Build #21 application state as a Windows artifact.
 jobs:
   build:
     name: Full Maven Build and Windows Artifact
