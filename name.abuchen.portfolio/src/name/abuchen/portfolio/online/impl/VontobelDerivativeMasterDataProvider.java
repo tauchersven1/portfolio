@@ -180,9 +180,9 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
                         Pattern.CASE_INSENSITIVE);
         Pattern dateFirst = Pattern.compile(date + "\\s+" + Pattern.quote(label), Pattern.CASE_INSENSITIVE);
 
-        Optional<String> value = match(labelFirst, text, 1);
+        Optional<String> value = match(dateFirst, text, 1);
         if (value.isEmpty())
-            value = match(dateFirst, text, 1);
+            value = match(labelFirst, text, 1);
         if (value.isEmpty())
             return Optional.empty();
 
