@@ -1,0 +1,37 @@
+name: Apply KO Validation
+
+on:
+  push:
+    branches:
+      - agent/ko-certificates-fx
+    paths:
+      - .github/scripts/apply_ko_validation.py
+      - .github/workflows/apply-ko-validation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/ko-certificates-fx
+          fetch-depth: 0
+
+      - name: Apply validation patch
+        run: python .github/scripts/apply_ko_validation.py
+
+      - name: Commit generated change
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/wizards/security/SecurityMultiplierPage.java
+          git commit -m "Validate KO certificate master data"
+          git push origin HEAD:agent/ko-certificates-fx
