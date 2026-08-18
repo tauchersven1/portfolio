@@ -1,6 +1,7 @@
 package name.abuchen.portfolio.snapshot;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 import java.time.LocalDate;
@@ -99,6 +100,80 @@ public class ExposureCalculatorFxKnockoutTest
                         ExposureType.NOTIONAL);
 
         assertThat(exposure, is(Money.of("EUR", Values.Amount.factorize(100.0))));
+    }
+
+    @Test
+    public void testFxKnockoutFallsBackToMultiplierForInvalidPersistedRatio()
+    {
+        for (String invalid : List.of("0", "-100", "NaN", "abc"))
+        {
+            Security certificate = certificate("CALL", 0.5);
+            certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.SUBSCRIPTION_RATIO,
+                            invalid);
+            certificate.addMultiplier(SecurityMultiplier.of(LocalDate.of(2026, 1, 2), 50.0));
+
+            Money exposure = ExposureCalculator.calculate(new Client(),
+                            position(certificate, 2, PortfolioTransaction.Type.BUY), DATE, new TestCurrencyConverter(),
+                            ExposureType.NOTIONAL);
+
+            assertThat("ratio=" + invalid, exposure, is(Money.of("EUR", Values.Amount.factorize(100.0))));
+        }
+    }
+
+    @Test
+    public void testFxKnockoutNormalizesPersistedCurrencyCodes()
+    {
+        Security certificate = certificate("CALL", 0.5);
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.FX_BASE_CURRENCY, " eur ");
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.FX_QUOTE_CURRENCY, " jpy ");
+
+        Money exposure = ExposureCalculator.calculate(new Client(),
+                        position(certificate, 2, PortfolioTransaction.Type.BUY), DATE, new TestCurrencyConverter(),
+                        ExposureType.NOTIONAL);
+
+        assertThat(exposure, is(Money.of("EUR", Values.Amount.factorize(200.0))));
+    }
+
+    @Test
+    public void testFxKnockoutRejectsInvalidOrIdenticalPersistedCurrencies()
+    {
+        Security missingQuote = certificate("CALL", 0.5);
+        missingQuote.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.FX_QUOTE_CURRENCY, null);
+
+        Security invalidBase = certificate("CALL", 0.5);
+        invalidBase.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.FX_BASE_CURRENCY, "EU1");
+
+        Security identical = certificate("CALL", 0.5);
+        identical.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.FX_QUOTE_CURRENCY, "EUR");
+
+        assertThat(ExposureCalculator.calculate(new Client(),
+                        position(missingQuote, 2, PortfolioTransaction.Type.BUY), DATE, new TestCurrencyConverter(),
+                        ExposureType.NOTIONAL), is(nullValue()));
+        assertThat(ExposureCalculator.calculate(new Client(),
+                        position(invalidBase, 2, PortfolioTransaction.Type.BUY), DATE, new TestCurrencyConverter(),
+                        ExposureType.NOTIONAL), is(nullValue()));
+        assertThat(ExposureCalculator.calculate(new Client(),
+                        position(identical, 2, PortfolioTransaction.Type.BUY), DATE, new TestCurrencyConverter(),
+                        ExposureType.NOTIONAL), is(nullValue()));
+    }
+
+    @Test
+    public void testKoMasterDataPropertiesAreStoredIndependentlyOfExposureMath()
+    {
+        Security certificate = certificate("CALL", 0.5);
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.ISSUER, "Vontobel");
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.ISSUER_PRODUCT_ID,
+                        "VH6D6U");
+
+        assertThat(certificate.getPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.ISSUER)
+                        .orElse(null), is("Vontobel"));
+        assertThat(certificate.getPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.ISSUER_PRODUCT_ID)
+                        .orElse(null), is("VH6D6U"));
+
+        Money exposure = ExposureCalculator.calculate(new Client(),
+                        position(certificate, 2, PortfolioTransaction.Type.BUY), DATE, new TestCurrencyConverter(),
+                        ExposureType.NOTIONAL);
+        assertThat(exposure, is(Money.of("EUR", Values.Amount.factorize(200.0))));
     }
 
     private Security certificate(String putCall, double delta)
