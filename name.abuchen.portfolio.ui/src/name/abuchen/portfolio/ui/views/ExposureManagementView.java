@@ -176,6 +176,7 @@ public class ExposureManagementView extends AbstractFinanceView
         getClient().getUsedCurrencies().stream().map(c -> c.getCurrencyCode()).sorted()
                         .filter(c -> currency.indexOf(c) < 0).forEach(currency::add);
         totalBar = combo(filters, "Total bar", "Hide", "Show");
+        totalBar.select(1);
 
         exposureType.addListener(SWT.Selection, e -> notifyModelUpdated());
         currency.addListener(SWT.Selection, e -> notifyModelUpdated());
