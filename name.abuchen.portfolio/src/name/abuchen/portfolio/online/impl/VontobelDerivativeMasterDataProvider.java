@@ -1,6 +1,7 @@
 package name.abuchen.portfolio.online.impl;
 
 import java.io.IOException;
+import java.net.URI;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -62,20 +63,25 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
         if (identifier == null)
             return Optional.empty();
 
-        String html = null;
-        String matchedPath = null;
         IOException last = null;
         for (String path : PRODUCT_PATHS)
         {
             try
             {
-                String candidate = new WebAccess("markets.vontobel.com", path + identifier.trim()).get();
-                if (containsIdentifier(candidate, identifier))
-                {
-                    html = candidate;
-                    matchedPath = path;
-                    break;
-                }
+                String html = download(path, identifier.trim());
+                if (html == null)
+                    continue;
+
+                // A WKN URL can redirect to an ISIN URL. In either case the returned
+                // page must contain either the requested identifier or the security's
+                // already known ISIN/WKN before we trust it.
+                if (!containsIdentifier(html, identifier) && !containsIdentifier(html, security.getIsin())
+                                && !containsIdentifier(html, security.getWkn()))
+                    continue;
+
+                Result result = parsePage(html, path);
+                if (!result.isEmpty())
+                    return Optional.of(result);
             }
             catch (WebAccessException e)
             {
@@ -83,13 +89,35 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
             }
         }
 
-        if (html == null)
-        {
-            if (last != null && last.getHttpErrorCode() >= 500)
-                throw last;
-            return Optional.empty();
-        }
+        if (last != null && last instanceof WebAccessException web && web.getHttpErrorCode() >= 500)
+            throw last;
+        return Optional.empty();
+    }
 
+    private String download(String path, String identifier) throws IOException
+    {
+        try
+        {
+            return new WebAccess("markets.vontobel.com", path + identifier).get();
+        }
+        catch (WebAccessException e)
+        {
+            if (e.getHttpErrorCode() >= 300 && e.getHttpErrorCode() < 400)
+            {
+                Optional<String> location = e.getHeader("Location").stream().findFirst();
+                if (location.isPresent())
+                {
+                    URI uri = URI.create(location.get());
+                    if ("markets.vontobel.com".equalsIgnoreCase(uri.getHost()))
+                        return new WebAccess(uri.getHost(), uri.getPath()).get();
+                }
+            }
+            throw e;
+        }
+    }
+
+    static Result parsePage(String html, String matchedPath)
+    {
         String text = normalizeHtml(html);
         Result result = new Result();
         result.put("issuer", "Vontobel");
@@ -100,9 +128,13 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
         result.put("type", "OPTION");
         result.put("optionProductType", standardOption ? "VANILLA" : "KNOCK_OUT_CERTIFICATE");
 
-        if (containsWord(text, "Call") || containsWord(text, "Long"))
+        if (containsWord(text, "Call"))
             result.put("putCall", "CALL");
-        else if (containsWord(text, "Put") || containsWord(text, "Short"))
+        else if (containsWord(text, "Put"))
+            result.put("putCall", "PUT");
+        else if (containsWord(text, "Long"))
+            result.put("putCall", "CALL");
+        else if (containsWord(text, "Short"))
             result.put("putCall", "PUT");
 
         match(STRIKE, text, 1).map(VontobelDerivativeMasterDataProvider::normalizeDecimal)
@@ -133,7 +165,7 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
         matchDate(VALUATION, text).ifPresent(value -> result.put("expirationDate", value));
         matchDate(REPAYMENT, text).ifPresent(value -> result.put("settlementDate", value));
 
-        return result.isEmpty() ? Optional.empty() : Optional.of(result);
+        return result;
     }
 
     private static Optional<String[]> extractFxPair(String text)
@@ -172,7 +204,8 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
 
     private static boolean containsIdentifier(String html, String identifier)
     {
-        return html != null && html.toUpperCase(Locale.ROOT).contains(identifier.trim().toUpperCase(Locale.ROOT));
+        return identifier != null && !identifier.isBlank() && html != null
+                        && html.toUpperCase(Locale.ROOT).contains(identifier.trim().toUpperCase(Locale.ROOT));
     }
 
     private static boolean containsWord(String text, String word)
