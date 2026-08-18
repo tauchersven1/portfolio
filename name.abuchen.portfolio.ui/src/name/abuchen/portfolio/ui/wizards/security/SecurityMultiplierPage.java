@@ -971,8 +971,76 @@ public class SecurityMultiplierPage extends AbstractPage
             knockoutLevelEffectiveDate.setDate(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth());
     }
 
+    private boolean validateKnockoutMasterData()
+    {
+        boolean isKnockout = derivativeType.getSelectionIndex() == 2 && optionProductType.getSelectionIndex() == 2;
+        if (!isKnockout)
+            return true;
+
+        String ratio = text(subscriptionRatio);
+        if (fxUnderlying.getSelection() && ratio == null)
+        {
+            MessageDialog.openError(getShell(), "Missing subscription ratio",
+                            "Enter a positive subscription ratio for an FX K.O. certificate.");
+            subscriptionRatio.setFocus();
+            return false;
+        }
+
+        if (ratio != null)
+        {
+            try
+            {
+                double value = Double.parseDouble(ratio.replace(',', '.'));
+                if (!Double.isFinite(value) || value <= 0)
+                    throw new NumberFormatException();
+            }
+            catch (NumberFormatException e)
+            {
+                MessageDialog.openError(getShell(), "Invalid subscription ratio",
+                                "Enter a positive numeric subscription ratio.");
+                subscriptionRatio.setFocus();
+                subscriptionRatio.selectAll();
+                return false;
+            }
+        }
+
+        if (!fxUnderlying.getSelection())
+            return true;
+
+        String base = upper(text(fxBaseCurrency));
+        String quote = upper(text(fxQuoteCurrency));
+        if (base == null || !base.matches("[A-Z]{3}"))
+        {
+            MessageDialog.openError(getShell(), "Invalid base currency",
+                            "Enter a three-letter currency code such as EUR.");
+            fxBaseCurrency.setFocus();
+            fxBaseCurrency.selectAll();
+            return false;
+        }
+        if (quote == null || !quote.matches("[A-Z]{3}"))
+        {
+            MessageDialog.openError(getShell(), "Invalid quote currency",
+                            "Enter a three-letter currency code such as JPY.");
+            fxQuoteCurrency.setFocus();
+            fxQuoteCurrency.selectAll();
+            return false;
+        }
+        if (base.equals(quote))
+        {
+            MessageDialog.openError(getShell(), "Invalid currency pair",
+                            "Base currency and quote currency must be different.");
+            fxQuoteCurrency.setFocus();
+            fxQuoteCurrency.selectAll();
+            return false;
+        }
+
+        return true;
+    }
+
     public void applyChanges()
     {
+        if (!validateKnockoutMasterData())
+            return;
         security.removeAllMultipliers();
         multipliers.forEach(m -> security.addMultiplier(new SecurityMultiplier(m.getDate(), m.getValue())));
         SecurityDelta.replaceAll(security, deltas);
@@ -1015,7 +1083,7 @@ public class SecurityMultiplierPage extends AbstractPage
             setProperty(INITIAL_KNOCKOUT_LEVEL, isKnockout ? text(initialKnockoutLevel) : null);
             setProperty(ISSUER, isKnockout ? text(issuer) : null);
             setProperty(ISSUER_PRODUCT_ID, isKnockout ? text(issuerProductId) : null);
-            setProperty(SUBSCRIPTION_RATIO, isKnockout ? text(subscriptionRatio) : null);
+            setProperty(SUBSCRIPTION_RATIO, isKnockout ? normalizeDecimal(text(subscriptionRatio)) : null);
 
             boolean isFxUnderlying = isKnockout && fxUnderlying.getSelection();
             setProperty(FX_UNDERLYING, isFxUnderlying ? "true" : null);
@@ -1072,6 +1140,11 @@ public class SecurityMultiplierPage extends AbstractPage
     private static String upper(String value)
     {
         return value == null ? null : value.toUpperCase(Locale.ROOT);
+    }
+
+    private static String normalizeDecimal(String value)
+    {
+        return value == null ? null : value.replace(',', '.');
     }
 
     private static String underlyingLabel(Security security)
