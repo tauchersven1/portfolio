@@ -36,18 +36,11 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern STRIKE = Pattern.compile("Basispreis\\s*:?[\\s|]*([0-9][0-9.,]*)\\s*([A-Z]{3})?",
                     Pattern.CASE_INSENSITIVE);
-    private static final Pattern KO = Pattern.compile("(?:Knock-Out(?:\\s+Barriere|\\s+Schwelle)?|K\\.O\\.)\\s*:?[\\s|]*([0-9][0-9.,]*)",
+    private static final Pattern KO = Pattern.compile(
+                    "(?:Knock-Out(?:\\s+Barriere|\\s+Schwelle)?|K\\.O\\.)\\s*:?[\\s|]*([0-9][0-9.,]*)",
                     Pattern.CASE_INSENSITIVE);
-    private static final Pattern RATIO = Pattern.compile("Bezugsverh(?:ä|&auml;)ltnis\\s*:?[\\s|]*([0-9][0-9.,]*)",
-                    Pattern.CASE_INSENSITIVE);
-    private static final Pattern FIRST_TRADING = Pattern.compile("Erster Handelstag\\s*:?[\\s|]*(\\d{2}\\.\\d{2}\\.\\d{4})",
-                    Pattern.CASE_INSENSITIVE);
-    private static final Pattern LAST_TRADING = Pattern.compile("Letzter Handelstag\\s*:?[\\s|]*(\\d{2}\\.\\d{2}\\.\\d{4})",
-                    Pattern.CASE_INSENSITIVE);
-    private static final Pattern VALUATION = Pattern.compile("Bewertungstag\\s*:?[\\s|]*(\\d{2}\\.\\d{2}\\.\\d{4})",
-                    Pattern.CASE_INSENSITIVE);
-    private static final Pattern REPAYMENT = Pattern.compile("R(?:ü|&uuml;)ckzahlung(?:stag)?\\s*:?[\\s|]*(\\d{2}\\.\\d{2}\\.\\d{4})",
-                    Pattern.CASE_INSENSITIVE);
+    private static final Pattern RATIO = Pattern.compile(
+                    "Bezugsverh(?:ä|&auml;)ltnis\\s*:?[\\s|]*([0-9][0-9.,]*)", Pattern.CASE_INSENSITIVE);
     private static final DateTimeFormatter GERMAN_DATE = DateTimeFormatter.ofPattern("dd.MM.uuuu", Locale.GERMANY);
 
     @Override
@@ -72,9 +65,6 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
                 if (html == null)
                     continue;
 
-                // A WKN URL can redirect to an ISIN URL. In either case the returned
-                // page must contain either the requested identifier or the security's
-                // already known ISIN/WKN before we trust it.
                 if (!containsIdentifier(html, identifier) && !containsIdentifier(html, security.getIsin())
                                 && !containsIdentifier(html, security.getWkn()))
                     continue;
@@ -89,7 +79,7 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
             }
         }
 
-        if (last != null && last instanceof WebAccessException web && web.getHttpErrorCode() >= 500)
+        if (last instanceof WebAccessException web && web.getHttpErrorCode() >= 500)
             throw last;
         return Optional.empty();
     }
@@ -150,20 +140,20 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
             });
         }
 
-        Optional<String[]> pair = extractFxPair(text);
-        if (pair.isPresent())
-        {
-            String[] currencies = pair.get();
+        extractFxPair(text).ifPresent(currencies -> {
             result.put("underlying", currencies[0] + "/" + currencies[1]);
             result.put("fxUnderlying", "true");
             result.put("fxBaseCurrency", currencies[0]);
             result.put("fxQuoteCurrency", currencies[1]);
-        }
+        });
 
-        matchDate(FIRST_TRADING, text).ifPresent(value -> result.put("firstTradingDay", value));
-        matchDate(LAST_TRADING, text).ifPresent(value -> result.put("lastTradingDay", value));
-        matchDate(VALUATION, text).ifPresent(value -> result.put("expirationDate", value));
-        matchDate(REPAYMENT, text).ifPresent(value -> result.put("settlementDate", value));
+        matchDate(text, "Erster Handelstag").ifPresent(value -> result.put("firstTradingDay", value));
+        matchDate(text, "Letzter Handelstag").ifPresent(value -> result.put("lastTradingDay", value));
+        matchDate(text, "Bewertungstag").ifPresent(value -> result.put("expirationDate", value));
+        Optional<String> repayment = matchDate(text, "Rückzahlungstag");
+        if (repayment.isEmpty())
+            repayment = matchDate(text, "Rückzahlung");
+        repayment.ifPresent(value -> result.put("settlementDate", value));
 
         return result;
     }
@@ -181,11 +171,19 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
         return Optional.empty();
     }
 
-    private static Optional<String> matchDate(Pattern pattern, String text)
+    private static Optional<String> matchDate(String text, String label)
     {
-        Optional<String> value = match(pattern, text, 1);
+        String date = "(\\d{2}\\.\\d{2}\\.\\d{4})";
+        Pattern labelFirst = Pattern.compile(Pattern.quote(label) + "\\s*:?[\\s|]*" + date,
+                        Pattern.CASE_INSENSITIVE);
+        Pattern dateFirst = Pattern.compile(date + "\\s+" + Pattern.quote(label), Pattern.CASE_INSENSITIVE);
+
+        Optional<String> value = match(labelFirst, text, 1);
+        if (value.isEmpty())
+            value = match(dateFirst, text, 1);
         if (value.isEmpty())
             return Optional.empty();
+
         try
         {
             return Optional.of(LocalDate.parse(value.get(), GERMAN_DATE).toString());
@@ -217,17 +215,10 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
     {
         return html.replaceAll("(?is)<script.*?</script>", " ")
                         .replaceAll("(?is)<style.*?</style>", " ")
-                        .replaceAll("(?s)<[^>]+>", " ")
-                        .replace("&nbsp;", " ")
-                        .replace("&amp;", "&")
-                        .replace("&auml;", "ä")
-                        .replace("&ouml;", "ö")
-                        .replace("&uuml;", "ü")
-                        .replace("&Auml;", "Ä")
-                        .replace("&Ouml;", "Ö")
-                        .replace("&Uuml;", "Ü")
-                        .replaceAll("\\s+", " ")
-                        .trim();
+                        .replaceAll("(?s)<[^>]+>", " ").replace("&nbsp;", " ").replace("&amp;", "&")
+                        .replace("&auml;", "ä").replace("&ouml;", "ö").replace("&uuml;", "ü")
+                        .replace("&Auml;", "Ä").replace("&Ouml;", "Ö").replace("&Uuml;", "Ü")
+                        .replaceAll("\\s+", " ").trim();
     }
 
     private static String normalizeDecimal(String value)
