@@ -36,9 +36,17 @@ jobs:
           distribution: zulu
 
       - name: Set up Maven 3.9.16
-        uses: stCarolas/setup-maven@v5
-        with:
-          maven-version: 3.9.16
+        shell: bash
+        run: |
+          MAVEN_VERSION=3.9.16
+          MAVEN_ARCHIVE="apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+          MAVEN_BASE_URL="https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries"
+          curl --fail --location --retry 3 --retry-delay 2 --output "/tmp/${MAVEN_ARCHIVE}" "${MAVEN_BASE_URL}/${MAVEN_ARCHIVE}"
+          curl --fail --location --retry 3 --retry-delay 2 --output "/tmp/${MAVEN_ARCHIVE}.sha512" "${MAVEN_BASE_URL}/${MAVEN_ARCHIVE}.sha512"
+          cd /tmp
+          echo "$(cat ${MAVEN_ARCHIVE}.sha512)  ${MAVEN_ARCHIVE}" | sha512sum --check --status
+          tar -xzf "${MAVEN_ARCHIVE}"
+          echo "/tmp/apache-maven-${MAVEN_VERSION}/bin" >> "$GITHUB_PATH"
 
       - name: Build
         run: |
@@ -75,9 +83,17 @@ jobs:
           distribution: zulu
 
       - name: Set up Maven 3.9.16
-        uses: stCarolas/setup-maven@v5
-        with:
-          maven-version: 3.9.16
+        shell: bash
+        run: |
+          MAVEN_VERSION=3.9.16
+          MAVEN_ARCHIVE="apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+          MAVEN_BASE_URL="https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries"
+          curl --fail --location --retry 3 --retry-delay 2 --output "/tmp/${MAVEN_ARCHIVE}" "${MAVEN_BASE_URL}/${MAVEN_ARCHIVE}"
+          curl --fail --location --retry 3 --retry-delay 2 --output "/tmp/${MAVEN_ARCHIVE}.sha512" "${MAVEN_BASE_URL}/${MAVEN_ARCHIVE}.sha512"
+          cd /tmp
+          echo "$(cat ${MAVEN_ARCHIVE}.sha512)  ${MAVEN_ARCHIVE}" | sha512sum --check --status
+          tar -xzf "${MAVEN_ARCHIVE}"
+          echo "/tmp/apache-maven-${MAVEN_VERSION}/bin" >> "$GITHUB_PATH"
 
       - name: Build and analyze
         # sonar.login is deprecated since SonarQube 10.0 / SonarCloud — use sonar.token
