@@ -1,7 +1,6 @@
 package name.abuchen.portfolio.model;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.Assert.assertEquals;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -47,6 +46,6 @@ public class KnockoutCertificatePropertyPersistenceTest
 
     private void assertProperty(Security security, String name, String expected)
     {
-        assertThat(security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, name).orElse(null), is(expected));
+        assertEquals(expected, security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, name).orElse(null));
     }
 }
