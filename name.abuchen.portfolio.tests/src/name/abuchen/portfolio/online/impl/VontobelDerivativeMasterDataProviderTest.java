@@ -2,6 +2,7 @@ package name.abuchen.portfolio.online.impl;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
+import static org.hamcrest.CoreMatchers.nullValue;
 
 import org.junit.Test;
 
@@ -76,7 +77,7 @@ public class VontobelDerivativeMasterDataProviderTest
     }
 
     @Test
-    public void testParsesEquityUnderlyingAndDecimalSubscriptionRatio()
+    public void testParsesEquityUnderlyingDecimalRatioAndIssuerPrice()
     {
         String html = """
                         <html><body>
@@ -84,6 +85,7 @@ public class VontobelDerivativeMasterDataProviderTest
                         <div>Long</div>
                         <div>ISIN DE000BD2SXK2 WKN BD2SXK</div>
                         <div>Basiswert Airbnb Inc. Class A</div>
+                        <div>Basiswertkurs 125,40 USD</div>
                         <div>Basispreis 130,50 USD</div>
                         <div>Knock-Out Barriere 130,50 USD</div>
                         <div>Bezugsverhältnis 0,1</div>
@@ -95,7 +97,31 @@ public class VontobelDerivativeMasterDataProviderTest
 
         assertThat(result.get("underlying"), is("Airbnb Inc. Class A"));
         assertThat(result.get("subscriptionRatio"), is("0.1"));
+        assertThat(result.get("issuerUnderlyingPrice"), is("125.40"));
+        assertThat(result.get("issuerUnderlyingCurrency"), is("USD"));
         assertThat(result.get("optionProductType"), is("KNOCK_OUT_CERTIFICATE"));
         assertThat(result.get("putCall"), is("CALL"));
+    }
+
+    @Test
+    public void testRejectsWebsiteSearchTextAsUnderlying()
+    {
+        String html = """
+                        <html><body>
+                        <div>Long</div>
+                        <div>ISIN DE000BD2SXK2 WKN BD2SXK</div>
+                        <div>Basiswert e, Produkte und Themen suchen</div>
+                        <div>Basiswertkurs 125,40 USD</div>
+                        <div>Basispreis 130,50 USD</div>
+                        <div>Bezugsverhältnis 0,1</div>
+                        </body></html>
+                        """;
+
+        Result result = VontobelDerivativeMasterDataProvider.parsePage(html,
+                        "/de-de/produkte/hebel/turbo-optionsscheine-open-end/");
+
+        assertThat(result.get("underlying"), is(nullValue()));
+        assertThat(result.get("issuerUnderlyingPrice"), is("125.40"));
+        assertThat(result.get("issuerUnderlyingCurrency"), is("USD"));
     }
 }
