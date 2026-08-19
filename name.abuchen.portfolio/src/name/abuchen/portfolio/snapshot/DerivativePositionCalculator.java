@@ -119,6 +119,7 @@ public final class DerivativePositionCalculator
                         .replaceAll("\\b(common|ordinary)\\s+(stock|shares?)\\b", " ") //$NON-NLS-1$ //$NON-NLS-2$
                         .replaceAll("\\b(incorporated|inc|corporation|corp|limited|ltd|plc|ag|se|nv|sa)\\b", " ") //$NON-NLS-1$ //$NON-NLS-2$
                         .replaceAll("\\bdl\\b", " ") //$NON-NLS-1$ //$NON-NLS-2$
+                        .replaceAll("\\b\\d+\\b", " ") //$NON-NLS-1$ //$NON-NLS-2$
                         .replaceAll("[^a-z0-9]+", " ") //$NON-NLS-1$ //$NON-NLS-2$
                         .trim().replaceAll("\\s+", " "); //$NON-NLS-1$ //$NON-NLS-2$
     }
