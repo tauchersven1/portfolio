@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.PortfolioTransaction;
@@ -101,7 +102,25 @@ public final class DerivativePositionCalculator
                 return true;
         }
 
-        return false;
+        String normalizedSearch = normalizeUnderlyingName(search);
+        String normalizedName = normalizeUnderlyingName(security.getName());
+        return !normalizedSearch.isEmpty() && normalizedSearch.equals(normalizedName);
+    }
+
+    private static String normalizeUnderlyingName(String value)
+    {
+        if (value == null)
+            return ""; //$NON-NLS-1$
+
+        return value.toLowerCase(Locale.ROOT)
+                        .replaceAll("\\[[^\\]]+\\]", " ") //$NON-NLS-1$ //$NON-NLS-2$
+                        .replaceAll("\\bclass\\s+[a-z0-9]+\\b", " ") //$NON-NLS-1$ //$NON-NLS-2$
+                        .replaceAll("\\bregistered\\s+shares?\\b", " ") //$NON-NLS-1$ //$NON-NLS-2$
+                        .replaceAll("\\b(common|ordinary)\\s+(stock|shares?)\\b", " ") //$NON-NLS-1$ //$NON-NLS-2$
+                        .replaceAll("\\b(incorporated|inc|corporation|corp|limited|ltd|plc|ag|se|nv|sa)\\b", " ") //$NON-NLS-1$ //$NON-NLS-2$
+                        .replaceAll("\\bdl\\b", " ") //$NON-NLS-1$ //$NON-NLS-2$
+                        .replaceAll("[^a-z0-9]+", " ") //$NON-NLS-1$ //$NON-NLS-2$
+                        .trim().replaceAll("\\s+", " "); //$NON-NLS-1$ //$NON-NLS-2$
     }
 
     public static Money calculateMarketValue(Security security, long shares, SecurityPrice price,
