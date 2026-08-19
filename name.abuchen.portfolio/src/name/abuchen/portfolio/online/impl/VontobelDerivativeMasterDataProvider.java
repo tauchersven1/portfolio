@@ -34,6 +34,12 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
     private static final Pattern FX_PAIR = Pattern.compile("\\b([A-Z]{3})/([A-Z]{3})\\b");
     private static final Pattern FX_PER_ONE = Pattern.compile("\\b([A-Z]{3})\\s+per\\s+1\\s+([A-Z]{3})\\b",
                     Pattern.CASE_INSENSITIVE);
+    private static final Pattern UNDERLYING = Pattern.compile(
+                    "(?:Basiswert|Underlying)\\s*:?[\\s|]*([^|]{2,120}?)(?=\\s+(?:Basispreis|Knock-Out|K\\.O\\.|Bezugsverh(?:ä|&auml;)ltnis|Währung|Waehrung|Fälligkeit|Faelligkeit|Erster Handelstag|Letzter Handelstag|Bewertungstag|Rückzahlung|Rueckzahlung|Emittent|ISIN|WKN)\\b)",
+                    Pattern.CASE_INSENSITIVE);
+    private static final Pattern UNDERLYING_FROM_TITLE = Pattern.compile(
+                    "\\b(?:Call|Put|Long|Short)\\b(?:\\s+[A-Za-z0-9+.-]+){0,5}\\s+auf\\s+(.{2,120}?)(?=\\s+(?:Basispreis|Knock-Out|K\\.O\\.|Bezugsverh(?:ä|&auml;)ltnis|ISIN|WKN|Emittent)\\b)",
+                    Pattern.CASE_INSENSITIVE);
     private static final Pattern STRIKE = Pattern.compile("Basispreis\\s*:?[\\s|]*([0-9][0-9.,]*)\\s*([A-Z]{3})?",
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern KO = Pattern.compile(
@@ -142,12 +148,19 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
             });
         }
 
-        extractFxPair(text).ifPresent(currencies -> {
+        Optional<String[]> fxPair = extractFxPair(text);
+        if (fxPair.isPresent())
+        {
+            String[] currencies = fxPair.get();
             result.put("underlying", currencies[0] + "/" + currencies[1]);
             result.put("fxUnderlying", "true");
             result.put("fxBaseCurrency", currencies[0]);
             result.put("fxQuoteCurrency", currencies[1]);
-        });
+        }
+        else
+        {
+            extractUnderlying(text).ifPresent(value -> result.put("underlying", value));
+        }
 
         matchDate(text, "Erster Handelstag").ifPresent(value -> result.put("firstTradingDay", value));
         matchDate(text, "Letzter Handelstag").ifPresent(value -> result.put("lastTradingDay", value));
@@ -158,6 +171,21 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
         repayment.ifPresent(value -> result.put("settlementDate", value));
 
         return result;
+    }
+
+    private static Optional<String> extractUnderlying(String text)
+    {
+        Optional<String> value = match(UNDERLYING, text, 1);
+        if (value.isEmpty())
+            value = match(UNDERLYING_FROM_TITLE, text, 1);
+
+        return value.map(VontobelDerivativeMasterDataProvider::normalizeUnderlying)
+                        .filter(candidate -> !candidate.isBlank());
+    }
+
+    private static String normalizeUnderlying(String value)
+    {
+        return value.replaceAll("\\s+", " ").replaceAll("^[|: -]+|[|: -]+$", "").trim();
     }
 
     private static Optional<String[]> extractFxPair(String text)
