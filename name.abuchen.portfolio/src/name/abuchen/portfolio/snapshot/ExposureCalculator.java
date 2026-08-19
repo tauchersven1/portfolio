@@ -60,7 +60,10 @@ public final class ExposureCalculator
             return converter.convert(date, position.calculateValue(date));
 
         if (isFxKnockoutCertificate(security))
-            return calculateFxKnockoutExposure(position, security, date, exposureType);
+        {
+            Money rawExposure = calculateFxKnockoutExposure(position, security, date, exposureType);
+            return rawExposure == null ? null : converter.convert(date, rawExposure);
+        }
 
         long referenceValue;
         String exposureCurrency;
