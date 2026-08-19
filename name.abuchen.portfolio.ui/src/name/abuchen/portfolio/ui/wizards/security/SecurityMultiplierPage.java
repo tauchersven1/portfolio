@@ -69,6 +69,9 @@ public class SecurityMultiplierPage extends AbstractPage
     private static final String FX_UNDERLYING = "fxUnderlying";
     private static final String FX_BASE_CURRENCY = "fxBaseCurrency";
     private static final String FX_QUOTE_CURRENCY = "fxQuoteCurrency";
+    private static final String FX_EXPOSURE_CURRENCY = "fxExposureCurrency";
+    private static final String ISSUER_UNDERLYING_PRICE = "issuerUnderlyingPrice";
+    private static final String ISSUER_UNDERLYING_CURRENCY = "issuerUnderlyingCurrency";
 
     private static final String CONTRACT_MONTH = "contractMonth";
     private static final String FIRST_NOTICE_DAY = "firstNoticeDay";
@@ -78,7 +81,8 @@ public class SecurityMultiplierPage extends AbstractPage
                     FIRST_TRADING_DAY, EXPIRATION_DATE, LAST_TRADING_DAY, SETTLEMENT_TYPE, SETTLEMENT_DATE, EXCHANGE,
                     CONTRACT_SYMBOL, CONTRACT_SIZE, TICK_SIZE, PUT_CALL, STRIKE, EXERCISE_STYLE, OPTION_PRODUCT_TYPE,
                     INITIAL_KNOCKOUT_LEVEL, ISSUER, ISSUER_PRODUCT_ID, SUBSCRIPTION_RATIO, FX_UNDERLYING,
-                    FX_BASE_CURRENCY, FX_QUOTE_CURRENCY, CONTRACT_MONTH, FIRST_NOTICE_DAY, FINAL_SETTLEMENT_DATE };
+                    FX_BASE_CURRENCY, FX_QUOTE_CURRENCY, FX_EXPOSURE_CURRENCY, ISSUER_UNDERLYING_PRICE,
+                    ISSUER_UNDERLYING_CURRENCY, CONTRACT_MONTH, FIRST_NOTICE_DAY, FINAL_SETTLEMENT_DATE };
 
     private final Client client;
     private final Security security;
@@ -114,6 +118,9 @@ public class SecurityMultiplierPage extends AbstractPage
     private Button fxUnderlying;
     private Text fxBaseCurrency;
     private Text fxQuoteCurrency;
+    private Combo fxExposureCurrency;
+    private String issuerUnderlyingPrice;
+    private String issuerUnderlyingCurrency;
 
     private Group futureGroup;
     private Text contractMonth;
@@ -278,7 +285,7 @@ public class SecurityMultiplierPage extends AbstractPage
 
         new Label(optionGroup, SWT.NONE).setText("Strike");
         strike = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
-        GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(strike);
+        GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(strike);
 
         new Label(optionGroup, SWT.NONE).setText("Exercise style");
         exerciseStyle = new Combo(optionGroup, SWT.READ_ONLY);
@@ -298,10 +305,12 @@ public class SecurityMultiplierPage extends AbstractPage
             }
         });
 
+        new Label(optionGroup, SWT.NONE);
+        new Label(optionGroup, SWT.NONE);
         initialKnockoutLevelLabel = new Label(optionGroup, SWT.NONE);
         initialKnockoutLevelLabel.setText("Initial K.O. level");
         initialKnockoutLevel = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
-        GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(initialKnockoutLevel);
+        GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(initialKnockoutLevel);
 
         knockoutDetailsGroup = new Group(optionGroup, SWT.NONE);
         knockoutDetailsGroup.setText("K.O. certificate details");
@@ -344,6 +353,14 @@ public class SecurityMultiplierPage extends AbstractPage
         fxQuoteCurrency.setTextLimit(3);
         fxQuoteCurrency.setToolTipText("ISO currency code of the quote currency, e.g. JPY in EUR/JPY.");
         GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(fxQuoteCurrency);
+
+        new Label(knockoutDetailsGroup, SWT.NONE).setText("Exposure currency");
+        fxExposureCurrency = new Combo(knockoutDetailsGroup, SWT.READ_ONLY);
+        fxExposureCurrency.setItems("Base currency", "Quote currency");
+        fxExposureCurrency.select(0);
+        fxExposureCurrency.setToolTipText("Choose whether FX K.O. exposure is represented in base or quote currency before conversion to the reporting currency.");
+        new Label(knockoutDetailsGroup, SWT.NONE);
+        new Label(knockoutDetailsGroup, SWT.NONE);
 
         futureGroup = new Group(container, SWT.NONE);
         futureGroup.setText("Future");
@@ -752,6 +769,9 @@ public class SecurityMultiplierPage extends AbstractPage
         fxUnderlying.setSelection("true".equalsIgnoreCase(property(FX_UNDERLYING)));
         fxBaseCurrency.setText(valueOrEmpty(property(FX_BASE_CURRENCY)));
         fxQuoteCurrency.setText(valueOrEmpty(property(FX_QUOTE_CURRENCY)));
+        fxExposureCurrency.select("QUOTE".equalsIgnoreCase(property(FX_EXPOSURE_CURRENCY)) ? 1 : 0);
+        issuerUnderlyingPrice = property(ISSUER_UNDERLYING_PRICE);
+        issuerUnderlyingCurrency = property(ISSUER_UNDERLYING_CURRENCY);
         contractMonth.setText(valueOrEmpty(property(CONTRACT_MONTH)));
 
         firstTradingDay.setValue(property(FIRST_TRADING_DAY));
@@ -806,6 +826,8 @@ public class SecurityMultiplierPage extends AbstractPage
             fxBaseCurrency.setEnabled(enabled);
         if (fxQuoteCurrency != null)
             fxQuoteCurrency.setEnabled(enabled);
+        if (fxExposureCurrency != null)
+            fxExposureCurrency.setEnabled(enabled);
     }
 
     private void updateDeltaDefaultForPutCall()
@@ -1015,6 +1037,11 @@ public class SecurityMultiplierPage extends AbstractPage
             applyLookupResult(result.get());
             updateDeltaDefaultForPutCall();
             updateDerivativeControls();
+            if (showMessages && result.get().get(UNDERLYING) != null
+                            && underlyingSecurities.get(comboText(underlying)) == null
+                            && !fxUnderlying.getSelection())
+                MessageDialog.openInformation(getShell(), "Underlying nicht vorhanden",
+                                "Underlying nicht vorhanden, bitte anlegen und dann verknüpfen. Bis dahin wird – sofern vom Emittenten geliefert – dessen Underlying-Kurs als Exposure-Fallback verwendet.");
         }
         catch (IOException e)
         {
@@ -1053,6 +1080,8 @@ public class SecurityMultiplierPage extends AbstractPage
         }
         applyTextIfEmpty(fxBaseCurrency, result.get(FX_BASE_CURRENCY));
         applyTextIfEmpty(fxQuoteCurrency, result.get(FX_QUOTE_CURRENCY));
+        if (issuerUnderlyingPrice == null) issuerUnderlyingPrice = result.get(ISSUER_UNDERLYING_PRICE);
+        if (issuerUnderlyingCurrency == null) issuerUnderlyingCurrency = result.get(ISSUER_UNDERLYING_CURRENCY);
 
         applyDateIfEmpty(firstTradingDay, result.get(FIRST_TRADING_DAY));
         applyDateIfEmpty(expirationDate, result.get(EXPIRATION_DATE));
@@ -1257,6 +1286,9 @@ public class SecurityMultiplierPage extends AbstractPage
             setProperty(FX_UNDERLYING, isFxUnderlying ? "true" : null);
             setProperty(FX_BASE_CURRENCY, isFxUnderlying ? upper(text(fxBaseCurrency)) : null);
             setProperty(FX_QUOTE_CURRENCY, isFxUnderlying ? upper(text(fxQuoteCurrency)) : null);
+            setProperty(FX_EXPOSURE_CURRENCY, isFxUnderlying && fxExposureCurrency.getSelectionIndex() == 1 ? "QUOTE" : isFxUnderlying ? "BASE" : null);
+            setProperty(ISSUER_UNDERLYING_PRICE, isKnockout ? issuerUnderlyingPrice : null);
+            setProperty(ISSUER_UNDERLYING_CURRENCY, isKnockout ? issuerUnderlyingCurrency : null);
             SecurityKnockoutLevel.replaceAll(security, isKnockout ? knockoutLevels : Collections.emptyList());
 
             setProperty(CONTRACT_MONTH, null);
@@ -1275,6 +1307,9 @@ public class SecurityMultiplierPage extends AbstractPage
             setProperty(FX_UNDERLYING, null);
             setProperty(FX_BASE_CURRENCY, null);
             setProperty(FX_QUOTE_CURRENCY, null);
+            setProperty(FX_EXPOSURE_CURRENCY, null);
+            setProperty(ISSUER_UNDERLYING_PRICE, null);
+            setProperty(ISSUER_UNDERLYING_CURRENCY, null);
             SecurityKnockoutLevel.replaceAll(security, Collections.emptyList());
 
             setProperty(CONTRACT_MONTH, text(contractMonth));
