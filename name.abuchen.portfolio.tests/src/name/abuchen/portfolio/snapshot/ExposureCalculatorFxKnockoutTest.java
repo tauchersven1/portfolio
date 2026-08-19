@@ -158,6 +158,50 @@ public class ExposureCalculatorFxKnockoutTest
     }
 
     @Test
+    public void testNonFxKnockoutSupportsDecimalRatioAndNormalizedUnderlyingName()
+    {
+        Client client = new Client();
+        Security underlying = new Security("Airbnb Inc. Registered Shares DL -,01", "USD");
+        underlying.setTickerSymbol("ABNB");
+        underlying.addPrice(new SecurityPrice(DATE, Values.Quote.factorize(125.0)));
+        client.addSecurity(underlying);
+
+        Security certificate = new Security("Airbnb Turbo Long", "EUR");
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "type", "OPTION");
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "putCall", "CALL");
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.OPTION_PRODUCT_TYPE,
+                        ExposureCalculator.KNOCK_OUT_CERTIFICATE);
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "underlying", "Airbnb Inc. Class A");
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.SUBSCRIPTION_RATIO, "0.1");
+        client.addSecurity(certificate);
+
+        TestCurrencyConverter converter = new TestCurrencyConverter();
+        Money exposure = ExposureCalculator.calculate(client,
+                        position(certificate, 10, PortfolioTransaction.Type.BUY), DATE, converter,
+                        ExposureType.NOTIONAL);
+        Money expected = converter.convert(DATE, Money.of("USD", Values.Amount.factorize(125.0)));
+
+        assertThat(DerivativePositionCalculator.resolveUnderlying(client, certificate), is(underlying));
+        assertThat(exposure, is(expected));
+    }
+
+    @Test
+    public void testNormalizedUnderlyingLookupRemainsUnique()
+    {
+        Client client = new Client();
+        Security first = new Security("Airbnb Inc. Registered Shares", "USD");
+        Security second = new Security("Airbnb Corp. Class A", "USD");
+        client.addSecurity(first);
+        client.addSecurity(second);
+
+        Security certificate = new Security("Airbnb Turbo Long", "EUR");
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "underlying", "Airbnb Inc. Class A");
+        client.addSecurity(certificate);
+
+        assertThat(DerivativePositionCalculator.resolveUnderlying(client, certificate), is(nullValue()));
+    }
+
+    @Test
     public void testKoMasterDataPropertiesAreStoredIndependentlyOfExposureMath()
     {
         Security certificate = certificate("CALL", 0.5);
