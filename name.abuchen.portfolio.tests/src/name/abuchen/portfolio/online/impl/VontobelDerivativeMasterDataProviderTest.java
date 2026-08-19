@@ -74,4 +74,28 @@ public class VontobelDerivativeMasterDataProviderTest
         assertThat(result.get("expirationDate"), is("2026-12-18"));
         assertThat(result.get("settlementDate"), is("2026-12-28"));
     }
+
+    @Test
+    public void testParsesEquityUnderlyingAndDecimalSubscriptionRatio()
+    {
+        String html = """
+                        <html><body>
+                        <div>Turbo-Optionsschein Open End</div>
+                        <div>Long</div>
+                        <div>ISIN DE000BD2SXK2 WKN BD2SXK</div>
+                        <div>Basiswert Airbnb Inc. Class A</div>
+                        <div>Basispreis 130,50 USD</div>
+                        <div>Knock-Out Barriere 130,50 USD</div>
+                        <div>Bezugsverhältnis 0,1</div>
+                        </body></html>
+                        """;
+
+        Result result = VontobelDerivativeMasterDataProvider.parsePage(html,
+                        "/de-de/produkte/hebel/turbo-optionsscheine-open-end/");
+
+        assertThat(result.get("underlying"), is("Airbnb Inc. Class A"));
+        assertThat(result.get("subscriptionRatio"), is("0.1"));
+        assertThat(result.get("optionProductType"), is("KNOCK_OUT_CERTIFICATE"));
+        assertThat(result.get("putCall"), is("CALL"));
+    }
 }
