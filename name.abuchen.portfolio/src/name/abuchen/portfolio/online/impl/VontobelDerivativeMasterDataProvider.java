@@ -35,10 +35,13 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
     private static final Pattern FX_PER_ONE = Pattern.compile("\\b([A-Z]{3})\\s+per\\s+1\\s+([A-Z]{3})\\b",
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern UNDERLYING = Pattern.compile(
-                    "(?:Basiswert|Underlying)\\s*:?[\\s|]*([^|]{2,120}?)(?=\\s+(?:Basispreis|Knock-Out|K\\.O\\.|Bezugsverh(?:ä|&auml;)ltnis|Währung|Waehrung|Fälligkeit|Faelligkeit|Erster Handelstag|Letzter Handelstag|Bewertungstag|Rückzahlung|Rueckzahlung|Emittent|ISIN|WKN)\\b)",
+                    "(?:Basiswert|Underlying)\\s*:?[\\s|]*([^|]{2,120}?)(?=\\s+(?:Basiswertkurs|Kurs des Basiswerts|Underlying-Kurs|Basispreis|Knock-Out|K\\.O\\.|Bezugsverh(?:ä|&auml;)ltnis|Währung|Waehrung|Fälligkeit|Faelligkeit|Erster Handelstag|Letzter Handelstag|Bewertungstag|Rückzahlung|Rueckzahlung|Emittent|ISIN|WKN)\\b)",
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern UNDERLYING_FROM_TITLE = Pattern.compile(
-                    "\\b(?:Call|Put|Long|Short)\\b(?:\\s+[A-Za-z0-9+.-]+){0,5}\\s+auf\\s+(.{2,120}?)(?=\\s+(?:Basispreis|Knock-Out|K\\.O\\.|Bezugsverh(?:ä|&auml;)ltnis|ISIN|WKN|Emittent)\\b)",
+                    "\\b(?:Call|Put|Long|Short)\\b(?:\\s+[A-Za-z0-9+.-]+){0,5}\\s+auf\\s+(.{2,120}?)(?=\\s+(?:Basiswertkurs|Kurs des Basiswerts|Underlying-Kurs|Basispreis|Knock-Out|K\\.O\\.|Bezugsverh(?:ä|&auml;)ltnis|ISIN|WKN|Emittent)\\b)",
+                    Pattern.CASE_INSENSITIVE);
+    private static final Pattern UNDERLYING_PRICE = Pattern.compile(
+                    "(?:Basiswertkurs|Kurs\\s+des\\s+Basiswerts|Underlying[- ]?Kurs)\\s*:?[\\s|]*([0-9][0-9.,]*)\\s*([A-Z]{3})",
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern STRIKE = Pattern.compile("Basispreis\\s*:?[\\s|]*([0-9][0-9.,]*)\\s*([A-Z]{3})?",
                     Pattern.CASE_INSENSITIVE);
@@ -160,6 +163,12 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
         else
         {
             extractUnderlying(text).ifPresent(value -> result.put("underlying", value));
+            Matcher underlyingPrice = UNDERLYING_PRICE.matcher(text);
+            if (underlyingPrice.find())
+            {
+                result.put("issuerUnderlyingPrice", normalizeDecimal(underlyingPrice.group(1)));
+                result.put("issuerUnderlyingCurrency", underlyingPrice.group(2).toUpperCase(Locale.ROOT));
+            }
         }
 
         matchDate(text, "Erster Handelstag").ifPresent(value -> result.put("firstTradingDay", value));
@@ -180,7 +189,15 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
             value = match(UNDERLYING_FROM_TITLE, text, 1);
 
         return value.map(VontobelDerivativeMasterDataProvider::normalizeUnderlying)
-                        .filter(candidate -> !candidate.isBlank());
+                        .filter(candidate -> !candidate.isBlank()).filter(VontobelDerivativeMasterDataProvider::isPlausibleUnderlying);
+    }
+
+    private static boolean isPlausibleUnderlying(String value)
+    {
+        String normalized = value.toLowerCase(Locale.ROOT);
+        return !normalized.contains("produkte und themen suchen") && !normalized.contains("produkte & themen suchen")
+                        && !normalized.contains("search products") && !normalized.startsWith("suchen ")
+                        && !normalized.equals("suchen");
     }
 
     private static String normalizeUnderlying(String value)
