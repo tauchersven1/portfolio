@@ -43,6 +43,7 @@ public class VontobelDerivativeMasterDataProviderTest
         assertThat(result.get("initialKnockoutLevel"), is("160.70"));
         assertThat(result.get("currentKnockoutLevel"), is("160.70"));
         assertThat(result.get("subscriptionRatio"), is("100.00"));
+        assertThat(result.get("issuerLeverage"), is("12.5"));
         assertThat(result.get("firstTradingDay"), is("2026-06-16"));
     }
 
