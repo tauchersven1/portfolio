@@ -13,7 +13,10 @@ import name.abuchen.portfolio.money.Values;
 
 public final class ExposureCalculator
 {
-    public enum ExposureType { MARKET_VALUE, NOTIONAL, DELTA_ADJUSTED }
+    public enum ExposureType
+    {
+        MARKET_VALUE, NOTIONAL, DELTA_ADJUSTED
+    }
 
     public static final String OPTION_PRODUCT_TYPE = "optionProductType";
     public static final String KNOCK_OUT_CERTIFICATE = "KNOCK_OUT_CERTIFICATE";
@@ -27,7 +30,9 @@ public final class ExposureCalculator
     public static final String ISSUER = "issuer";
     public static final String ISSUER_PRODUCT_ID = "issuerProductId";
 
-    private ExposureCalculator() {}
+    private ExposureCalculator()
+    {
+    }
 
     public static Money calculate(Client client, SecurityPosition position, LocalDate date,
                     CurrencyConverter converter, ExposureType exposureType)
@@ -111,8 +116,15 @@ public final class ExposureCalculator
     {
         String value = security.getPropertyValue(SecurityProperty.Type.DERIVATIVE, key).orElse(null);
         if (value == null || value.isBlank()) return null;
-        try { double parsed = Double.parseDouble(value.trim().replace(',', '.')); return Double.isFinite(parsed) && parsed > 0 ? parsed : null; }
-        catch (NumberFormatException e) { return null; }
+        try
+        {
+            double parsed = Double.parseDouble(value.trim().replace(',', '.'));
+            return Double.isFinite(parsed) && parsed > 0 ? parsed : null;
+        }
+        catch (NumberFormatException e)
+        {
+            return null;
+        }
     }
 
     private static double getSubscriptionRatio(Security security, LocalDate date)
