@@ -6,6 +6,7 @@ import java.util.Locale;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityDelta;
+import name.abuchen.portfolio.model.SecurityKnockoutLevel;
 import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.Money;
@@ -20,6 +21,7 @@ public final class ExposureCalculator
 
     public static final String OPTION_PRODUCT_TYPE = "optionProductType";
     public static final String KNOCK_OUT_CERTIFICATE = "KNOCK_OUT_CERTIFICATE";
+    public static final String INITIAL_KNOCKOUT_LEVEL = "initialKnockoutLevel";
     public static final String FX_UNDERLYING = "fxUnderlying";
     public static final String FX_BASE_CURRENCY = "fxBaseCurrency";
     public static final String FX_QUOTE_CURRENCY = "fxQuoteCurrency";
@@ -71,8 +73,21 @@ public final class ExposureCalculator
                 Double fallbackPrice = getPositiveDecimal(security, ISSUER_UNDERLYING_PRICE);
                 exposureCurrency = normalizeCurrency(security.getPropertyValue(SecurityProperty.Type.DERIVATIVE,
                                 ISSUER_UNDERLYING_CURRENCY).orElse(null));
-                if (fallbackPrice == null || exposureCurrency == null) return null;
-                referenceValue = Values.Quote.factorize(fallbackPrice);
+
+                if (fallbackPrice != null)
+                {
+                    referenceValue = Values.Quote.factorize(fallbackPrice);
+                    if (exposureCurrency == null)
+                        exposureCurrency = security.getCurrencyCode();
+                }
+                else
+                {
+                    Long derivedReference = deriveKnockoutReferenceValue(position, security, date);
+                    if (derivedReference == null) return null;
+                    referenceValue = derivedReference.longValue();
+                    if (exposureCurrency == null)
+                        exposureCurrency = security.getCurrencyCode();
+                }
             }
             else return null;
         }
@@ -93,6 +108,25 @@ public final class ExposureCalculator
 
         return converter.convert(date, DerivativePositionCalculator.valueOf(position.getShares(), referenceValue,
                         factor, exposureCurrency));
+    }
+
+    private static Long deriveKnockoutReferenceValue(SecurityPosition position, Security security, LocalDate date)
+    {
+        double ratio = getSubscriptionRatio(security, date);
+        if (!Double.isFinite(ratio) || ratio <= 0) return null;
+
+        Double knockoutLevel = SecurityKnockoutLevel.getLevel(security, date);
+        if (knockoutLevel == null)
+            knockoutLevel = getPositiveDecimal(security, INITIAL_KNOCKOUT_LEVEL);
+        if (knockoutLevel == null) return null;
+
+        long knockoutValue = Values.Quote.factorize(knockoutLevel.doubleValue());
+        long certificatePrice = position.getPrice().getValue();
+        double direction = SecurityDelta.getDefaultDelta(security) < 0 ? -1.0 : 1.0;
+        double derived = knockoutValue + direction * certificatePrice / ratio;
+        if (!Double.isFinite(derived) || derived <= 0 || derived > Long.MAX_VALUE) return null;
+
+        return Math.round(derived);
     }
 
     private static Money calculateFxKnockoutExposure(SecurityPosition position, Security security, LocalDate date,
