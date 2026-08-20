@@ -45,6 +45,9 @@ import name.abuchen.portfolio.online.DerivativeMasterDataProvider.Result;
 @SuppressWarnings("nls")
 public class SecurityMultiplierPage extends AbstractPage
 {
+    private static final int OPTION_FIELD_WIDTH = 180;
+    private static final int KO_DETAIL_FIELD_WIDTH = 180;
+
     private static final String TYPE = "type";
     private static final String UNDERLYING = "underlying";
     private static final String UNDERLYING_SECURITY_UUID = "underlyingSecurityUUID";
@@ -274,6 +277,7 @@ public class SecurityMultiplierPage extends AbstractPage
         putCall = new Combo(optionGroup, SWT.READ_ONLY);
         putCall.setItems("Not specified", "Call", "Put");
         putCall.select(0);
+        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(putCall);
         putCall.addSelectionListener(new SelectionAdapter()
         {
             @Override
@@ -285,17 +289,13 @@ public class SecurityMultiplierPage extends AbstractPage
 
         new Label(optionGroup, SWT.NONE).setText("Strike");
         strike = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
-        GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(strike);
-
-        new Label(optionGroup, SWT.NONE).setText("Exercise style");
-        exerciseStyle = new Combo(optionGroup, SWT.READ_ONLY);
-        exerciseStyle.setItems("Not specified", "European", "American", "Bermudan");
-        exerciseStyle.select(0);
+        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(strike);
 
         new Label(optionGroup, SWT.NONE).setText("Product type");
         optionProductType = new Combo(optionGroup, SWT.READ_ONLY);
         optionProductType.setItems("Not specified", "Standard option", "K.O. certificate");
         optionProductType.select(0);
+        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(optionProductType);
         optionProductType.addSelectionListener(new SelectionAdapter()
         {
             @Override
@@ -305,12 +305,18 @@ public class SecurityMultiplierPage extends AbstractPage
             }
         });
 
-        new Label(optionGroup, SWT.NONE);
-        new Label(optionGroup, SWT.NONE);
         initialKnockoutLevelLabel = new Label(optionGroup, SWT.NONE);
         initialKnockoutLevelLabel.setText("Initial K.O. level");
         initialKnockoutLevel = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
-        GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(initialKnockoutLevel);
+        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(initialKnockoutLevel);
+
+        new Label(optionGroup, SWT.NONE).setText("Exercise style");
+        exerciseStyle = new Combo(optionGroup, SWT.READ_ONLY);
+        exerciseStyle.setItems("Not specified", "European", "American", "Bermudan");
+        exerciseStyle.select(0);
+        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(exerciseStyle);
+        new Label(optionGroup, SWT.NONE);
+        new Label(optionGroup, SWT.NONE);
 
         knockoutDetailsGroup = new Group(optionGroup, SWT.NONE);
         knockoutDetailsGroup.setText("K.O. certificate details");
@@ -319,20 +325,21 @@ public class SecurityMultiplierPage extends AbstractPage
 
         new Label(knockoutDetailsGroup, SWT.NONE).setText("Issuer");
         issuer = new Text(knockoutDetailsGroup, SWT.BORDER);
-        GridDataFactory.fillDefaults().grab(true, false).applyTo(issuer);
+        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuer);
 
         new Label(knockoutDetailsGroup, SWT.NONE).setText("Issuer product ID");
         issuerProductId = new Text(knockoutDetailsGroup, SWT.BORDER);
-        GridDataFactory.fillDefaults().grab(true, false).applyTo(issuerProductId);
+        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuerProductId);
 
         new Label(knockoutDetailsGroup, SWT.NONE).setText("Subscription ratio");
         subscriptionRatio = new Text(knockoutDetailsGroup, SWT.BORDER | SWT.RIGHT);
         subscriptionRatio.setToolTipText("Base units represented by one certificate, e.g. 100 for a EUR/JPY turbo representing 100 EUR.");
-        GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(subscriptionRatio);
+        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(subscriptionRatio);
 
         new Label(knockoutDetailsGroup, SWT.NONE).setText("FX Underlying");
         fxUnderlying = new Button(knockoutDetailsGroup, SWT.CHECK);
         fxUnderlying.setText("Currency pair");
+        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(fxUnderlying);
         fxUnderlying.addSelectionListener(new SelectionAdapter()
         {
             @Override
@@ -346,19 +353,20 @@ public class SecurityMultiplierPage extends AbstractPage
         fxBaseCurrency = new Text(knockoutDetailsGroup, SWT.BORDER);
         fxBaseCurrency.setTextLimit(3);
         fxBaseCurrency.setToolTipText("ISO currency code of the base currency, e.g. EUR in EUR/JPY.");
-        GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(fxBaseCurrency);
+        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(fxBaseCurrency);
 
         new Label(knockoutDetailsGroup, SWT.NONE).setText("Quote currency");
         fxQuoteCurrency = new Text(knockoutDetailsGroup, SWT.BORDER);
         fxQuoteCurrency.setTextLimit(3);
         fxQuoteCurrency.setToolTipText("ISO currency code of the quote currency, e.g. JPY in EUR/JPY.");
-        GridDataFactory.fillDefaults().hint(80, SWT.DEFAULT).applyTo(fxQuoteCurrency);
+        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(fxQuoteCurrency);
 
         new Label(knockoutDetailsGroup, SWT.NONE).setText("Exposure currency");
         fxExposureCurrency = new Combo(knockoutDetailsGroup, SWT.READ_ONLY);
         fxExposureCurrency.setItems("Base currency", "Quote currency");
         fxExposureCurrency.select(0);
         fxExposureCurrency.setToolTipText("Choose whether FX K.O. exposure is represented in base or quote currency before conversion to the reporting currency.");
+        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(fxExposureCurrency);
         new Label(knockoutDetailsGroup, SWT.NONE);
         new Label(knockoutDetailsGroup, SWT.NONE);
 
