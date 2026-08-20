@@ -1,6 +1,7 @@
 package name.abuchen.portfolio.snapshot;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 import java.time.LocalDate;
@@ -13,7 +14,6 @@ import name.abuchen.portfolio.junit.TestCurrencyConverter;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.Security;
-import name.abuchen.portfolio.model.SecurityKnockoutLevel;
 import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.SecurityPrice;
 import name.abuchen.portfolio.model.SecurityProperty;
@@ -61,34 +61,46 @@ public class ExposureCalculatorKnockoutRatioTest
     }
 
     @Test
-    public void testCallWithoutLinkedUnderlyingDerivesExposureFromKoLevelAndCertificatePrice()
+    public void testCallWithoutLinkedUnderlyingUsesIssuerLeverageAndCertificatePrice()
     {
         Client client = new Client();
         Security certificate = certificate(null, "0.1");
-        SecurityKnockoutLevel.replaceAll(certificate,
-                        List.of(SecurityKnockoutLevel.of(LocalDate.of(2026, 1, 1), 85.0)));
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.ISSUER_LEVERAGE, "6.5");
         client.addSecurity(certificate);
 
         Money exposure = ExposureCalculator.calculate(client, position(certificate, 2), DATE,
                         new TestCurrencyConverter(), ExposureType.NOTIONAL);
 
-        assertThat(exposure, is(Money.of("EUR", Values.Amount.factorize(25.0))));
+        assertThat(exposure, is(Money.of("EUR", Values.Amount.factorize(52.0))));
     }
 
     @Test
-    public void testPutWithoutLinkedUnderlyingDerivesNegativeExposureFromKoLevelAndCertificatePrice()
+    public void testPutWithoutLinkedUnderlyingUsesIssuerLeverageWithNegativeDirection()
     {
         Client client = new Client();
         Security certificate = certificate(null, "0.1");
         certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "putCall", "PUT");
-        SecurityKnockoutLevel.replaceAll(certificate,
-                        List.of(SecurityKnockoutLevel.of(LocalDate.of(2026, 1, 1), 165.0)));
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.ISSUER_LEVERAGE, "6.5");
         client.addSecurity(certificate);
 
         Money exposure = ExposureCalculator.calculate(client, position(certificate, 2), DATE,
                         new TestCurrencyConverter(), ExposureType.NOTIONAL);
 
-        assertThat(exposure, is(Money.of("EUR", Values.Amount.factorize(-25.0))));
+        assertThat(exposure, is(Money.of("EUR", Values.Amount.factorize(-52.0))));
+    }
+
+    @Test
+    public void testMissingUnderlyingAndIssuerLeverageDoesNotReconstructFromKoLevel()
+    {
+        Client client = new Client();
+        Security certificate = certificate(null, "0.1");
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "initialKnockoutLevel", "85.0");
+        client.addSecurity(certificate);
+
+        Money exposure = ExposureCalculator.calculate(client, position(certificate, 2), DATE,
+                        new TestCurrencyConverter(), ExposureType.NOTIONAL);
+
+        assertThat(exposure, is(nullValue()));
     }
 
     private Security certificate(Security underlying, String subscriptionRatio)
