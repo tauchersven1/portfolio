@@ -12,6 +12,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.online.DerivativeMasterDataProvider;
 import name.abuchen.portfolio.util.WebAccess;
 import name.abuchen.portfolio.util.WebAccess.WebAccessException;
@@ -50,6 +51,8 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern RATIO = Pattern.compile(
                     "Bezugsverh(?:ä|&auml;)ltnis\\s*:?[\\s|]*([0-9][0-9.,]*)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LEVERAGE = Pattern.compile(
+                    "(?:Hebel|Leverage)\\s*:?[\\s|]*([0-9][0-9.,]*)", Pattern.CASE_INSENSITIVE);
     private static final DateTimeFormatter GERMAN_DATE = DateTimeFormatter.ofPattern("dd.MM.uuuu", Locale.GERMANY);
 
     @Override
@@ -80,7 +83,13 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
 
                 Result result = parsePage(html, path);
                 if (!result.isEmpty())
+                {
+                    String issuerLeverage = result.get("issuerLeverage");
+                    if (issuerLeverage != null && security
+                                    .getPropertyValue(SecurityProperty.Type.DERIVATIVE, "issuerLeverage").isEmpty())
+                        security.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "issuerLeverage", issuerLeverage);
                     return Optional.of(result);
+                }
             }
             catch (WebAccessException e)
             {
@@ -142,6 +151,8 @@ public class VontobelDerivativeMasterDataProvider implements DerivativeMasterDat
                         .ifPresent(value -> result.put("strike", value));
         match(RATIO, text, 1).map(VontobelDerivativeMasterDataProvider::normalizeDecimal)
                         .ifPresent(value -> result.put("subscriptionRatio", value));
+        match(LEVERAGE, text, 1).map(VontobelDerivativeMasterDataProvider::normalizeDecimal)
+                        .ifPresent(value -> result.put("issuerLeverage", value));
 
         if (!standardOption)
         {
