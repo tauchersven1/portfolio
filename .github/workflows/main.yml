@@ -49,10 +49,21 @@ jobs:
           echo "/tmp/apache-maven-${MAVEN_VERSION}/bin" >> "$GITHUB_PATH"
 
       - name: Build
+        shell: bash
         run: |
+          set -o pipefail
           mvn verify \
             --batch-mode \
-            --file portfolio-app/pom.xml
+            --file portfolio-app/pom.xml 2>&1 | tee maven-build-linux.log
+
+      - name: Upload Maven build log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: maven-build-log-linux-${{ github.run_number }}
+          path: maven-build-linux.log
+          if-no-files-found: error
+          retention-days: 7
 
   windows-build:
     name: Windows Build + ZIP Artifact
