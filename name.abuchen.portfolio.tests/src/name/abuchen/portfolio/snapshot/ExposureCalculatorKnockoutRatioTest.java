@@ -13,6 +13,7 @@ import name.abuchen.portfolio.junit.TestCurrencyConverter;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityKnockoutLevel;
 import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.SecurityPrice;
 import name.abuchen.portfolio.model.SecurityProperty;
@@ -59,6 +60,37 @@ public class ExposureCalculatorKnockoutRatioTest
         assertThat(exposure, is(Money.of("EUR", Values.Amount.factorize(2500.0))));
     }
 
+    @Test
+    public void testCallWithoutLinkedUnderlyingDerivesExposureFromKoLevelAndCertificatePrice()
+    {
+        Client client = new Client();
+        Security certificate = certificate(null, "0.1");
+        SecurityKnockoutLevel.replaceAll(certificate,
+                        List.of(SecurityKnockoutLevel.of(LocalDate.of(2026, 1, 1), 85.0)));
+        client.addSecurity(certificate);
+
+        Money exposure = ExposureCalculator.calculate(client, position(certificate, 2), DATE,
+                        new TestCurrencyConverter(), ExposureType.NOTIONAL);
+
+        assertThat(exposure, is(Money.of("EUR", Values.Amount.factorize(25.0))));
+    }
+
+    @Test
+    public void testPutWithoutLinkedUnderlyingDerivesNegativeExposureFromKoLevelAndCertificatePrice()
+    {
+        Client client = new Client();
+        Security certificate = certificate(null, "0.1");
+        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "putCall", "PUT");
+        SecurityKnockoutLevel.replaceAll(certificate,
+                        List.of(SecurityKnockoutLevel.of(LocalDate.of(2026, 1, 1), 165.0)));
+        client.addSecurity(certificate);
+
+        Money exposure = ExposureCalculator.calculate(client, position(certificate, 2), DATE,
+                        new TestCurrencyConverter(), ExposureType.NOTIONAL);
+
+        assertThat(exposure, is(Money.of("EUR", Values.Amount.factorize(-25.0))));
+    }
+
     private Security certificate(Security underlying, String subscriptionRatio)
     {
         Security certificate = new Security("Stock K.O.", "EUR");
@@ -66,7 +98,8 @@ public class ExposureCalculatorKnockoutRatioTest
         certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "putCall", "CALL");
         certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.OPTION_PRODUCT_TYPE,
                         ExposureCalculator.KNOCK_OUT_CERTIFICATE);
-        certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "underlyingSecurityUUID", underlying.getUUID());
+        if (underlying != null)
+            certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "underlyingSecurityUUID", underlying.getUUID());
         certificate.setPropertyValue(SecurityProperty.Type.DERIVATIVE, ExposureCalculator.SUBSCRIPTION_RATIO,
                         subscriptionRatio);
         certificate.addMultiplier(SecurityMultiplier.of(LocalDate.of(2026, 1, 1), 10.0));
