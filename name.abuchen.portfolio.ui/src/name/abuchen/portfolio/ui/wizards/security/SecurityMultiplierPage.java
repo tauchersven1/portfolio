@@ -47,6 +47,7 @@ public class SecurityMultiplierPage extends AbstractPage
 {
     private static final int OPTION_FIELD_WIDTH = 180;
     private static final int KO_DETAIL_FIELD_WIDTH = 180;
+    private static final int DERIVATIVE_LABEL_WIDTH = 110;
 
     private static final String TYPE = "type";
     private static final String UNDERLYING = "underlying";
@@ -273,7 +274,7 @@ public class SecurityMultiplierPage extends AbstractPage
         GridLayoutFactory.fillDefaults().numColumns(4).margins(8, 8).spacing(8, 6).applyTo(optionGroup);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(optionGroup);
 
-        new Label(optionGroup, SWT.NONE).setText("Put / Call");
+        createAlignedLabel(optionGroup, "Put / Call");
         putCall = new Combo(optionGroup, SWT.READ_ONLY);
         putCall.setItems("Not specified", "Call", "Put");
         putCall.select(0);
@@ -287,11 +288,11 @@ public class SecurityMultiplierPage extends AbstractPage
             }
         });
 
-        new Label(optionGroup, SWT.NONE).setText("Strike");
+        createAlignedLabel(optionGroup, "Strike");
         strike = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
         GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(strike);
 
-        new Label(optionGroup, SWT.NONE).setText("Product type");
+        createAlignedLabel(optionGroup, "Product type");
         optionProductType = new Combo(optionGroup, SWT.READ_ONLY);
         optionProductType.setItems("Not specified", "Standard option", "K.O. certificate");
         optionProductType.select(0);
@@ -305,12 +306,11 @@ public class SecurityMultiplierPage extends AbstractPage
             }
         });
 
-        initialKnockoutLevelLabel = new Label(optionGroup, SWT.NONE);
-        initialKnockoutLevelLabel.setText("Initial K.O. level");
+        initialKnockoutLevelLabel = createAlignedLabel(optionGroup, "Initial K.O. level");
         initialKnockoutLevel = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
         GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(initialKnockoutLevel);
 
-        new Label(optionGroup, SWT.NONE).setText("Exercise style");
+        createAlignedLabel(optionGroup, "Exercise style");
         exerciseStyle = new Combo(optionGroup, SWT.READ_ONLY);
         exerciseStyle.setItems("Not specified", "European", "American", "Bermudan");
         exerciseStyle.select(0);
@@ -320,23 +320,23 @@ public class SecurityMultiplierPage extends AbstractPage
 
         knockoutDetailsGroup = new Group(optionGroup, SWT.NONE);
         knockoutDetailsGroup.setText("K.O. certificate details");
-        GridLayoutFactory.fillDefaults().numColumns(4).margins(8, 8).spacing(8, 6).applyTo(knockoutDetailsGroup);
+        GridLayoutFactory.fillDefaults().numColumns(4).margins(0, 8).spacing(8, 6).applyTo(knockoutDetailsGroup);
         GridDataFactory.fillDefaults().grab(true, false).span(4, 1).applyTo(knockoutDetailsGroup);
 
-        new Label(knockoutDetailsGroup, SWT.NONE).setText("Issuer");
+        createAlignedLabel(knockoutDetailsGroup, "Issuer");
         issuer = new Text(knockoutDetailsGroup, SWT.BORDER);
         GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuer);
 
-        new Label(knockoutDetailsGroup, SWT.NONE).setText("Issuer product ID");
+        createAlignedLabel(knockoutDetailsGroup, "Issuer product ID");
         issuerProductId = new Text(knockoutDetailsGroup, SWT.BORDER);
         GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuerProductId);
 
-        new Label(knockoutDetailsGroup, SWT.NONE).setText("Subscription ratio");
+        createAlignedLabel(knockoutDetailsGroup, "Subscription ratio");
         subscriptionRatio = new Text(knockoutDetailsGroup, SWT.BORDER | SWT.RIGHT);
         subscriptionRatio.setToolTipText("Base units represented by one certificate, e.g. 100 for a EUR/JPY turbo representing 100 EUR.");
         GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(subscriptionRatio);
 
-        new Label(knockoutDetailsGroup, SWT.NONE).setText("FX Underlying");
+        createAlignedLabel(knockoutDetailsGroup, "FX Underlying");
         fxUnderlying = new Button(knockoutDetailsGroup, SWT.CHECK);
         fxUnderlying.setText("Currency pair");
         GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(fxUnderlying);
@@ -349,19 +349,19 @@ public class SecurityMultiplierPage extends AbstractPage
             }
         });
 
-        new Label(knockoutDetailsGroup, SWT.NONE).setText("Base currency");
+        createAlignedLabel(knockoutDetailsGroup, "Base currency");
         fxBaseCurrency = new Text(knockoutDetailsGroup, SWT.BORDER);
         fxBaseCurrency.setTextLimit(3);
         fxBaseCurrency.setToolTipText("ISO currency code of the base currency, e.g. EUR in EUR/JPY.");
         GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(fxBaseCurrency);
 
-        new Label(knockoutDetailsGroup, SWT.NONE).setText("Quote currency");
+        createAlignedLabel(knockoutDetailsGroup, "Quote currency");
         fxQuoteCurrency = new Text(knockoutDetailsGroup, SWT.BORDER);
         fxQuoteCurrency.setTextLimit(3);
         fxQuoteCurrency.setToolTipText("ISO currency code of the quote currency, e.g. JPY in EUR/JPY.");
         GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(fxQuoteCurrency);
 
-        new Label(knockoutDetailsGroup, SWT.NONE).setText("Exposure currency");
+        createAlignedLabel(knockoutDetailsGroup, "Exposure currency");
         fxExposureCurrency = new Combo(knockoutDetailsGroup, SWT.READ_ONLY);
         fxExposureCurrency.setItems("Base currency", "Quote currency");
         fxExposureCurrency.select(0);
@@ -380,6 +380,14 @@ public class SecurityMultiplierPage extends AbstractPage
         GridDataFactory.fillDefaults().hint(120, SWT.DEFAULT).applyTo(contractMonth);
 
         firstNoticeDay = new OptionalDateField(futureGroup, "First notice day");
+    }
+
+    private static Label createAlignedLabel(Composite parent, String text)
+    {
+        Label label = new Label(parent, SWT.NONE);
+        label.setText(text);
+        GridDataFactory.fillDefaults().hint(DERIVATIVE_LABEL_WIDTH, SWT.DEFAULT).applyTo(label);
+        return label;
     }
 
     private static void addEmptyHalf(Composite parent)
