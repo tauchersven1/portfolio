@@ -305,10 +305,8 @@ public class SecurityMultiplierPage extends AbstractPage
                 updateOptionProductControls();
             }
         });
-
-        initialKnockoutLevelLabel = createAlignedLabel(optionGroup, "Initial K.O. level");
-        initialKnockoutLevel = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
-        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(initialKnockoutLevel);
+        new Label(optionGroup, SWT.NONE);
+        new Label(optionGroup, SWT.NONE);
 
         createAlignedLabel(optionGroup, "Exercise style");
         exerciseStyle = new Combo(optionGroup, SWT.READ_ONLY);
@@ -318,23 +316,33 @@ public class SecurityMultiplierPage extends AbstractPage
         new Label(optionGroup, SWT.NONE);
         new Label(optionGroup, SWT.NONE);
 
+        createAlignedLabel(optionGroup, "Issuer");
+        issuer = new Text(optionGroup, SWT.BORDER);
+        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuer);
+        new Label(optionGroup, SWT.NONE);
+        new Label(optionGroup, SWT.NONE);
+
+        createAlignedLabel(optionGroup, "Issuer product ID");
+        issuerProductId = new Text(optionGroup, SWT.BORDER);
+        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuerProductId);
+        new Label(optionGroup, SWT.NONE);
+        new Label(optionGroup, SWT.NONE);
+
+        createAlignedLabel(optionGroup, "Subscription ratio");
+        subscriptionRatio = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
+        subscriptionRatio.setToolTipText("Underlying units represented by one option/certificate.");
+        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(subscriptionRatio);
+        new Label(optionGroup, SWT.NONE);
+        new Label(optionGroup, SWT.NONE);
+
         knockoutDetailsGroup = new Group(optionGroup, SWT.NONE);
         knockoutDetailsGroup.setText("K.O. certificate details");
         GridLayoutFactory.fillDefaults().numColumns(4).margins(0, 8).spacing(8, 6).applyTo(knockoutDetailsGroup);
         GridDataFactory.fillDefaults().grab(true, false).span(4, 1).applyTo(knockoutDetailsGroup);
 
-        createAlignedLabel(knockoutDetailsGroup, "Issuer");
-        issuer = new Text(knockoutDetailsGroup, SWT.BORDER);
-        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuer);
-
-        createAlignedLabel(knockoutDetailsGroup, "Issuer product ID");
-        issuerProductId = new Text(knockoutDetailsGroup, SWT.BORDER);
-        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuerProductId);
-
-        createAlignedLabel(knockoutDetailsGroup, "Subscription ratio");
-        subscriptionRatio = new Text(knockoutDetailsGroup, SWT.BORDER | SWT.RIGHT);
-        subscriptionRatio.setToolTipText("Base units represented by one certificate, e.g. 100 for a EUR/JPY turbo representing 100 EUR.");
-        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(subscriptionRatio);
+        initialKnockoutLevelLabel = createAlignedLabel(knockoutDetailsGroup, "Initial K.O. level");
+        initialKnockoutLevel = new Text(knockoutDetailsGroup, SWT.BORDER | SWT.RIGHT);
+        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(initialKnockoutLevel);
 
         createAlignedLabel(knockoutDetailsGroup, "FX Underlying");
         fxUnderlying = new Button(knockoutDetailsGroup, SWT.CHECK);
@@ -1069,10 +1077,12 @@ public class SecurityMultiplierPage extends AbstractPage
 
     private boolean hasEmptyLookupTargets()
     {
+        boolean knockout = optionProductType.getSelectionIndex() == 2;
         return derivativeType.getSelectionIndex() == 0 || comboText(underlying) == null || putCall.getSelectionIndex() == 0
                         || text(strike) == null || optionProductType.getSelectionIndex() == 0
-                        || text(initialKnockoutLevel) == null || text(issuer) == null || text(subscriptionRatio) == null
-                        || !fxUnderlying.getSelection() || text(fxBaseCurrency) == null || text(fxQuoteCurrency) == null
+                        || (knockout && text(initialKnockoutLevel) == null) || text(issuer) == null
+                        || text(subscriptionRatio) == null || (knockout && !fxUnderlying.getSelection())
+                        || (knockout && text(fxBaseCurrency) == null) || (knockout && text(fxQuoteCurrency) == null)
                         || firstTradingDay.getValue() == null || expirationDate.getValue() == null
                         || lastTradingDay.getValue() == null || settlementDate.getValue() == null;
     }
@@ -1087,6 +1097,7 @@ public class SecurityMultiplierPage extends AbstractPage
         applyTextIfEmpty(strike, result.get(STRIKE));
         applyTextIfEmpty(initialKnockoutLevel, result.get(INITIAL_KNOCKOUT_LEVEL));
         applyTextIfEmpty(issuer, result.get(ISSUER));
+        applyTextIfEmpty(issuerProductId, result.get(ISSUER_PRODUCT_ID));
         applyTextIfEmpty(subscriptionRatio, result.get(SUBSCRIPTION_RATIO));
 
         if (!fxUnderlying.getSelection() && "true".equalsIgnoreCase(result.get(FX_UNDERLYING)))
@@ -1291,12 +1302,12 @@ public class SecurityMultiplierPage extends AbstractPage
             setProperty(STRIKE, text(strike));
             setProperty(EXERCISE_STYLE, comboValue(exerciseStyle, "EUROPEAN", "AMERICAN", "BERMUDAN"));
             setProperty(OPTION_PRODUCT_TYPE, comboValue(optionProductType, "VANILLA", "KNOCK_OUT_CERTIFICATE"));
+            setProperty(ISSUER, text(issuer));
+            setProperty(ISSUER_PRODUCT_ID, text(issuerProductId));
+            setProperty(SUBSCRIPTION_RATIO, normalizeDecimal(text(subscriptionRatio)));
 
             boolean isKnockout = optionProductType.getSelectionIndex() == 2;
             setProperty(INITIAL_KNOCKOUT_LEVEL, isKnockout ? text(initialKnockoutLevel) : null);
-            setProperty(ISSUER, isKnockout ? text(issuer) : null);
-            setProperty(ISSUER_PRODUCT_ID, isKnockout ? text(issuerProductId) : null);
-            setProperty(SUBSCRIPTION_RATIO, isKnockout ? normalizeDecimal(text(subscriptionRatio)) : null);
 
             boolean isFxUnderlying = isKnockout && fxUnderlying.getSelection();
             setProperty(FX_UNDERLYING, isFxUnderlying ? "true" : null);
