@@ -7,6 +7,11 @@ on:
       - agent/derivatives-tab
       - agent/exposure-total-trading-symbol
       - agent/total-bar-default-show
+    paths-ignore:
+      - '.github/build-status/**'
+
+permissions:
+  contents: write
 
 # Rebuild marker: package the Build #21 application state as a Windows artifact.
 jobs:
@@ -92,3 +97,23 @@ jobs:
           path: portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Publish build status marker
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path '.github/build-status' | Out-Null
+          @"
+          run_id=${{ github.run_id }}
+          run_number=${{ github.run_number }}
+          job_status=${{ job.status }}
+          source_sha=${{ github.sha }}
+          source_ref=${{ github.ref_name }}
+          "@ | Set-Content -Path '.github/build-status/latest.txt' -Encoding utf8
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add '.github/build-status/latest.txt'
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { exit 0 }
+          git commit -m "Record Feature Build #${{ github.run_number }} status [skip ci]"
+          git push origin "HEAD:${{ github.ref_name }}"
