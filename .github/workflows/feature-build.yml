@@ -6,6 +6,9 @@ on:
     branches:
       - agent/security-multiplier
       - agent/derivatives-tab
+  pull_request:
+    branches:
+      - master
 
 jobs:
   build:
