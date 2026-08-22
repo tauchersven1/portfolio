@@ -2,7 +2,7 @@ name: Scheduled Feature Build
 
 on:
   schedule:
-    - cron: '52,57 * * * *'
+    - cron: '54,59 * * * *'
 
 permissions:
   contents: write
