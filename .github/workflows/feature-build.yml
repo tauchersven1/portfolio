@@ -7,6 +7,7 @@ on:
       - agent/derivatives-tab
       - agent/exposure-total-trading-symbol
       - agent/total-bar-default-show
+      - agent/build75-pp-0.87.0
 
 # Rebuild marker: package the Build #21 application state as a Windows artifact.
 jobs:
