@@ -6,6 +6,7 @@ on:
       - agent/security-multiplier
       - agent/derivatives-tab
       - agent/derivatives-integrated
+      - agent/derivatives-official-release
       - agent/exposure-total-trading-symbol
       - agent/total-bar-default-show
     paths-ignore:
