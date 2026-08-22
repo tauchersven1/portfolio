@@ -22,6 +22,7 @@ import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.PortfolioTransaction.Type;
 import name.abuchen.portfolio.model.PortfolioTransferEntry;
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.Transaction.Unit;
 import name.abuchen.portfolio.money.CurrencyUnit;
 import name.abuchen.portfolio.money.Money;
@@ -53,6 +54,7 @@ import name.abuchen.portfolio.money.Money;
         fields.add(new Field(FieldCode.ACCOUNT, Messages.CSVColumn_AccountName).setOptional(true));
         fields.add(new Field(FieldCode.PORTFOLIO, Messages.CSVColumn_PortfolioName).setOptional(true));
         fields.add(new Field(FieldCode.PORTFOLIO_2ND, Messages.CSVColumn_PortfolioName2nd).setOptional(true));
+        fields.add(new AmountField(FieldCode.MULTIPLIER, "Multiplikator").setOptional(true)); //$NON-NLS-1$
     }
 
     @Override
@@ -97,6 +99,10 @@ import name.abuchen.portfolio.money.Money;
         var date = getDate(FieldCode.DATE, FieldCode.TIME, rawValues, field2column);
         if (date == null)
             throw new ParseException(MessageFormat.format(Messages.CSVImportMissingField, Messages.CSVColumn_Date), 0);
+
+        var explicitMultiplier = getBigDecimal(FieldCode.MULTIPLIER, rawValues, field2column);
+        if (explicitMultiplier != null)
+            security.addMultiplier(SecurityMultiplier.of(date.toLocalDate(), explicitMultiplier.doubleValue()));
 
         var shares = getShares(FieldCode.SHARES, rawValues, field2column);
         var fees = getAmount(FieldCode.FEES, rawValues, field2column);

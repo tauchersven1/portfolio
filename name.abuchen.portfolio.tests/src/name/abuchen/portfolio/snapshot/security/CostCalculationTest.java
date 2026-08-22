@@ -19,6 +19,7 @@ import name.abuchen.portfolio.model.CostMethod;
 import name.abuchen.portfolio.model.Portfolio;
 import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.TaxesAndFees;
 import name.abuchen.portfolio.model.Transaction.Unit;
 import name.abuchen.portfolio.money.CurrencyConverter;
@@ -51,17 +52,10 @@ public class CostCalculationTest
         cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()
                         .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));
 
-        // expected:
-        // 3149,20 - round(3149,20 * 15/109) + 1684,92 + 959,30 = 5360,04385
-
         assertThat(cost.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
                         is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(5360.04))));
 
         assertThat(cost.getFifoCostTrail().getValue(), is(cost.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED)));
-
-        // expected moving average is identical because it is only one buy
-        // transaction
-        // 3149,20 * 94/109 + 1684.92 + 959.30 = 5360,04385
 
         assertThat(cost.getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),
                         is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(5360.04))));
@@ -86,16 +80,10 @@ public class CostCalculationTest
         cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()
                         .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));
 
-        // expected:
-        // 3149,20 + 1684,92 - round(3149,20 * 15/109) = 4400,743853211009174
-
         assertThat(cost.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
                         is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(4400.74))));
 
         assertThat(cost.getFifoCostTrail().getValue(), is(cost.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED)));
-
-        // transaction
-        // (3149,20 + 1684.92) * 146/161 = 4383,736149068322981
 
         assertThat(cost.getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),
                         is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(4383.74))));
@@ -141,7 +129,6 @@ public class CostCalculationTest
 
         LazySecurityPerformanceRecord record = snapshot.getRecords().get(0);
 
-        // 1.1588 = exchange rate of test currency converter on 2015-01-16
         assertThat(record.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
                         is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize((1000 / 1.1588) + 1100))));
 
@@ -200,4 +187,80 @@ public class CostCalculationTest
         assertThat(cost.getCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED), is(Money.of(CurrencyUnit.EUR, 0L)));
     }
 
+    @Test
+    public void testQuoteCostUsesMultiplierEffectiveOnTransactionDate()
+    {
+        Client client = new Client();
+        Security security = new SecurityBuilder().addTo(client);
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), 100d));
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-07-01"), 10d));
+
+        Portfolio portfolio = new PortfolioBuilder() //
+                        .buy(security, "2026-06-01", Values.Share.factorize(1), Values.Amount.factorize(4770d)) //
+                        .addTo(client);
+
+        CostCalculation cost = new CostCalculation();
+        cost.setSecurity(security);
+        cost.setTermCurrency(CurrencyUnit.EUR);
+        cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()
+                        .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));
+
+        // Monetary basis remains 4,770. Quote basis is 4,770 / 100 = 47.70.
+        assertThat(cost.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED),
+                        is(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(4770d))));
+        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED), is(Values.Quote.factorize(47.70d)));
+
+        // The later multiplier 10 must not revalue the historical BUY.
+        assertThat(security.getMultiplier(LocalDate.parse("2026-08-01")), is(10d));
+        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED), is(Values.Quote.factorize(47.70d)));
+    }
+
+    @Test
+    public void testQuoteCostKeepsHistoricalMultipliersForFifoAndMovingAverage()
+    {
+        Client client = new Client();
+        Security security = new SecurityBuilder().addTo(client);
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), 100d));
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-07-01"), 10d));
+
+        Portfolio portfolio = new PortfolioBuilder() //
+                        .buy(security, "2026-06-01", Values.Share.factorize(1), Values.Amount.factorize(4770d)) //
+                        .buy(security, "2026-08-01", Values.Share.factorize(1), Values.Amount.factorize(520d)) //
+                        .addTo(client);
+
+        CostCalculation cost = new CostCalculation();
+        cost.setSecurity(security);
+        cost.setTermCurrency(CurrencyUnit.EUR);
+        cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()
+                        .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));
+
+        long expected = Values.Quote.factorize(99.70d); // 4770 / 100 + 520 / 10
+        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED), is(expected));
+        assertThat(cost.getQuoteCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED), is(expected));
+    }
+
+    @Test
+    public void testFifoSaleReducesHistoricalQuoteCostLot()
+    {
+        Client client = new Client();
+        Security security = new SecurityBuilder().addTo(client);
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-01-01"), 100d));
+        security.addMultiplier(SecurityMultiplier.of(LocalDate.parse("2026-07-01"), 10d));
+
+        Portfolio portfolio = new PortfolioBuilder() //
+                        .buy(security, "2026-06-01", Values.Share.factorize(1), Values.Amount.factorize(4770d)) //
+                        .buy(security, "2026-08-01", Values.Share.factorize(1), Values.Amount.factorize(520d)) //
+                        .sell(security, "2026-08-10", Values.Share.factorize(1), Values.Amount.factorize(600d)) //
+                        .addTo(client);
+
+        CostCalculation cost = new CostCalculation();
+        cost.setSecurity(security);
+        cost.setTermCurrency(CurrencyUnit.EUR);
+        cost.visitAll(new TestCurrencyConverter(), portfolio.getTransactions().stream()
+                        .map(t -> CalculationLineItem.of(portfolio, t)).collect(Collectors.toList()));
+
+        assertThat(cost.getQuoteCost(CostMethod.FIFO, TaxesAndFees.INCLUDED), is(Values.Quote.factorize(52d)));
+        assertThat(cost.getQuoteCost(CostMethod.MOVING_AVERAGE, TaxesAndFees.INCLUDED),
+                        is(Values.Quote.factorize(49.85d)));
+    }
 }

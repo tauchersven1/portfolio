@@ -52,10 +52,12 @@ import name.abuchen.portfolio.ui.views.ReturnsVolatilityChartView;
 import name.abuchen.portfolio.ui.views.SecuritiesPerformanceView;
 import name.abuchen.portfolio.ui.views.SecurityListView;
 import name.abuchen.portfolio.ui.views.SecurityPriceUpdateView;
+import name.abuchen.portfolio.ui.views.ExposureManagementView;
 import name.abuchen.portfolio.ui.views.StatementOfAssetsHistoryView;
 import name.abuchen.portfolio.ui.views.StatementOfAssetsView;
 import name.abuchen.portfolio.ui.views.currency.CurrencyView;
 import name.abuchen.portfolio.ui.views.dashboard.DashboardView;
+import name.abuchen.portfolio.ui.views.holdings.HoldingsExposurePieChartView;
 import name.abuchen.portfolio.ui.views.holdings.HoldingsPieChartView;
 import name.abuchen.portfolio.ui.views.payments.PaymentsView;
 import name.abuchen.portfolio.ui.views.settings.SettingsView;
@@ -368,9 +370,6 @@ public final class Navigation
             generalData.add(createWatchlistItem(generalData, client, watchlist));
         }
 
-        // no need to remove the listener as the Navigation object is only a
-        // singleton and lives as long as the client (plus: no option to attach
-        // oneself here ot a dispose listener)
         client.addPropertyChangeListener(Client.Properties.WATCHLISTS, e -> {
             if (e.getNewValue() != null)
             {
@@ -429,8 +428,6 @@ public final class Navigation
             int size = list.size();
             int index = list.indexOf(watchlist);
 
-            // section has one more element: all securities. Therefore the index
-            // into the children needs an offset
             int offset = (int) section.getChildren().filter(i -> !(i.getParameter() instanceof Watchlist)).count();
 
             if (index > 0)
@@ -493,6 +490,8 @@ public final class Navigation
 
         statementOfAssets.add(new Item(Messages.ClientEditorLabelChart, StatementOfAssetsHistoryView.class, true));
         statementOfAssets.add(new Item(Messages.ClientEditorLabelHoldings, HoldingsPieChartView.class, true));
+        statementOfAssets.add(new Item("Bestand Exposure", HoldingsExposurePieChartView.class, true)); //$NON-NLS-1$
+        statementOfAssets.add(new Item("Exposuremanagement", ExposureManagementView.class, true)); //$NON-NLS-1$
 
         Item performance = new Item(Messages.ClientEditorLabelPerformance, DashboardView.class, true);
         section.add(performance);
@@ -546,9 +545,6 @@ public final class Navigation
             section.add(createTaxonomyItem(section, client, taxonomy));
         }
 
-        // no need to remove the listener as the Navigation object is only a
-        // singleton and lives as long as the client (plus: no option to attach
-        // oneself here to a dispose listener)
         client.addPropertyChangeListener(Client.Properties.TAXONOMIES, e -> {
             if (e.getNewValue() != null)
             {

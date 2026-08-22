@@ -48,6 +48,7 @@ import name.abuchen.portfolio.model.proto.v1.PMap;
 import name.abuchen.portfolio.model.proto.v1.PPortfolio;
 import name.abuchen.portfolio.model.proto.v1.PSecurity;
 import name.abuchen.portfolio.model.proto.v1.PSecurityEvent;
+import name.abuchen.portfolio.model.proto.v1.PSecurityMultiplier;
 import name.abuchen.portfolio.model.proto.v1.PSettings;
 import name.abuchen.portfolio.model.proto.v1.PTaxonomy;
 import name.abuchen.portfolio.model.proto.v1.PTransaction;
@@ -177,6 +178,10 @@ import name.abuchen.portfolio.money.Money;
 
             security.protobufSetPrices(newSecurity.getPricesList().stream()
                             .map(p -> new SecurityPrice(LocalDate.ofEpochDay(p.getDate()), p.getClose()))
+                            .collect(toMutableList()));
+
+            security.protobufSetMultipliers(newSecurity.getMultipliersList().stream()
+                            .map(m -> new SecurityMultiplier(LocalDate.ofEpochDay(m.getDate()), m.getValue()))
                             .collect(toMutableList()));
 
             if (newSecurity.hasLatestFeed())
@@ -919,6 +924,13 @@ import name.abuchen.portfolio.money.Money;
             {
                 newSecurity.addPrices(PHistoricalPrice.newBuilder().setDate(price.getDate().toEpochDay())
                                 .setClose(price.getValue()).build());
+            }
+
+            for (SecurityMultiplier multiplier : security.getMultipliers())
+            {
+                newSecurity.addMultipliers(PSecurityMultiplier.newBuilder()
+                                .setDate(multiplier.getDate().toEpochDay())
+                                .setValue(multiplier.getValue()).build());
             }
 
             if (security.getLatestFeed() != null)

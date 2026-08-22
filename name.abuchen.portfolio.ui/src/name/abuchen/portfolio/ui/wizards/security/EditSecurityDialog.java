@@ -37,6 +37,7 @@ import org.eclipse.swt.widgets.Text;
 import name.abuchen.portfolio.events.ChangeEventConstants;
 import name.abuchen.portfolio.events.SecurityChangeEvent;
 import name.abuchen.portfolio.model.Client;
+import name.abuchen.portfolio.model.OptionSymbolParser;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.ui.Images;
 import name.abuchen.portfolio.ui.Messages;
@@ -56,6 +57,8 @@ public class EditSecurityDialog extends Dialog
     private final EditSecurityModel model;
     private final EditSecurityCache cache;
     private final BindingHelper bindings;
+
+    private SecurityMultiplierPage multiplierPage;
 
     private boolean showQuoteConfigurationInitially = false;
 
@@ -207,12 +210,19 @@ public class EditSecurityDialog extends Dialog
         });
 
         addPage(new SecurityMasterDataPage(model, bindings), Images.SECURITY.image());
+
+        // Infer only missing derivative fields from OCC-style symbols such as
+        // IAG260918C00017000. Explicitly stored master data always wins.
+        OptionSymbolParser.populateMissingDerivativeProperties(model.getSecurity());
+
+        multiplierPage = new SecurityMultiplierPage(model.getClient(), model.getSecurity());
+        addPage(multiplierPage, null);
         addPage(new AttributesPage(model, bindings), null);
         addPage(new SecurityTaxonomyPage(model, bindings), null);
         addPage(new HistoricalQuoteProviderPage(model, cache, bindings), null);
         addPage(new LatestQuoteProviderPage(model, cache, bindings), null);
 
-        tabFolder.setSelection(showQuoteConfigurationInitially ? 3 : 0);
+        tabFolder.setSelection(showQuoteConfigurationInitially ? 4 : 0);
 
         // selection event not fired for initial selection
         ((AbstractPage) tabFolder.getSelection().getData()).beforePage();
@@ -254,6 +264,7 @@ public class EditSecurityDialog extends Dialog
         boolean quotesCanChange = feedChanged || onlineIdChanged || tickerChanged || feedURLChanged || currencyChanged;
 
         model.applyChanges();
+        multiplierPage.applyChanges();
 
         if (quotesCanChange)
             security.getEphemeralData().touchFeedConfigurationChanged();

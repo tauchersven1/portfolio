@@ -1,0 +1,61 @@
+name: Transaction Multiplier Cost Basis Fix
+# Re-trigger CI after restoring the existing TrailProvider explain implementation.
+
+on:
+  push:
+    branches:
+      - agent/transaction-multiplier-fix
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Zulu JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: 21
+          distribution: zulu
+
+      - name: Set up Maven 3.9.16
+        uses: stCarolas/setup-maven@v5
+        with:
+          maven-version: 3.9.16
+
+      - name: Full build and tests
+        shell: pwsh
+        run: |
+          mvn verify --batch-mode --file portfolio-app/pom.xml 2>&1 | Tee-Object -FilePath maven-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Bundle Windows Java runtime
+        if: success()
+        shell: pwsh
+        run: |
+          $product = 'portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio'
+          $jre = Join-Path $product 'jre'
+          New-Item -ItemType Directory -Force -Path $jre | Out-Null
+          Copy-Item -Path (Join-Path $env:JAVA_HOME '*') -Destination $jre -Recurse -Force
+
+      - name: Upload Windows x86_64 build
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: PortfolioPerformance-Windows-x86_64-cost-basis-fix-${{ github.run_number }}
+          path: portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: transaction-multiplier-cost-basis-fix-log-${{ github.run_number }}
+          path: maven-build.log
+          if-no-files-found: warn
+          retention-days: 7

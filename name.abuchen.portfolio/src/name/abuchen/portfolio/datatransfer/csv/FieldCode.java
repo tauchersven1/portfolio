@@ -36,4 +36,5 @@ package name.abuchen.portfolio.datatransfer.csv;
     public static final String ACCOUNT_2ND = "account2nd";
     public static final String PORTFOLIO = "portfolio";
     public static final String PORTFOLIO_2ND = "portfolio2nd";
+    public static final String MULTIPLIER = "multiplier";
 }

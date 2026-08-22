@@ -27,6 +27,7 @@ import org.eclipse.swt.widgets.Display;
 
 import name.abuchen.portfolio.model.Adaptor;
 import name.abuchen.portfolio.model.Client;
+import name.abuchen.portfolio.model.LatestSecurityPrice;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityPrice;
 import name.abuchen.portfolio.money.Values;
@@ -146,7 +147,7 @@ public class HistoricalPricesPane implements InformationPanePage
                             security.removePrice(price);
                             security.addPrice(price);
 
-                            client.markDirty();
+                            markDirtyAndRecalculate();
                         }).attachTo(column);
         support.addColumn(column);
 
@@ -162,7 +163,11 @@ public class HistoricalPricesPane implements InformationPanePage
         });
         ColumnViewerSorter.create(SecurityPrice.class, "value").attachTo(column); //$NON-NLS-1$
         new ValueEditingSupport(SecurityPrice.class, "value", Values.Quote, number -> number.longValue() != 0) //$NON-NLS-1$
-                        .addListener((e, o, n) -> client.markDirty()).attachTo(column);
+                        .addListener((e, o, n) -> {
+                            SecurityPrice price = (SecurityPrice) e;
+                            synchronizeLatestQuote(price);
+                            markDirtyAndRecalculate();
+                        }).attachTo(column);
         support.addColumn(column);
 
         support.createColumns();
@@ -187,7 +192,7 @@ public class HistoricalPricesPane implements InformationPanePage
                 if (dialog.open() != Window.OK)
                     return;
 
-                client.markDirty();
+                markDirtyAndRecalculate();
             }));
             manager.add(new Separator());
         }
@@ -212,7 +217,7 @@ public class HistoricalPricesPane implements InformationPanePage
                         security.removePrice(price);
                     }
 
-                    client.markDirty();
+                    markDirtyAndRecalculate();
                 }
             });
         }
@@ -229,7 +234,7 @@ public class HistoricalPricesPane implements InformationPanePage
 
                     security.removeAllPrices();
 
-                    client.markDirty();
+                    markDirtyAndRecalculate();
                 }
             });
         }
@@ -239,5 +244,21 @@ public class HistoricalPricesPane implements InformationPanePage
             manager.add(new Separator());
             new QuotesContextMenu(view).menuAboutToShow(manager, security);
         }
+    }
+
+    private void synchronizeLatestQuote(SecurityPrice price)
+    {
+        LatestSecurityPrice latest = security.getLatest();
+        if (latest == null || !latest.getDate().equals(price.getDate()) || latest.getValue() == price.getValue())
+            return;
+
+        security.setLatest(new LatestSecurityPrice(latest.getDate(), price.getValue(), latest.getHigh(), latest.getLow(),
+                        latest.getVolume()));
+    }
+
+    private void markDirtyAndRecalculate()
+    {
+        client.markDirty();
+        view.notifyModelUpdated();
     }
 }

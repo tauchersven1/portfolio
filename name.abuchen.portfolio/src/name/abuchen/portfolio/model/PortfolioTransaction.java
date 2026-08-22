@@ -191,10 +191,19 @@ public class PortfolioTransaction extends Transaction
         return converter.convert(getDateTime(), getGrossValue());
     }
 
+    private BigDecimal getTransactionMultiplier()
+    {
+        if (getSecurity() == null || getDateTime() == null)
+            return BigDecimal.ONE;
+
+        double multiplier = getSecurity().getMultiplier(getDateTime().toLocalDate());
+        return multiplier > 0d ? BigDecimal.valueOf(multiplier) : BigDecimal.ONE;
+    }
+
     /**
      * Returns the gross price per share, i.e. the gross value divided by the
-     * number of shares bought or sold. The quote uses the currency of the
-     * transaction.
+     * number of shares bought or sold and by the security multiplier effective
+     * on the transaction date. The quote uses the currency of the transaction.
      */
     public Quote getGrossPricePerShare()
     {
@@ -204,6 +213,7 @@ public class PortfolioTransaction extends Transaction
         long grossPrice = BigDecimal.valueOf(getGrossValueAmount()).movePointRight(Values.Quote.precisionDeltaToMoney()) //
                         .movePointRight(Values.Share.precision()) //
                         .divide(BigDecimal.valueOf(getShares()), Values.MC) //
+                        .divide(getTransactionMultiplier(), Values.MC) //
                         .setScale(0, RoundingMode.HALF_EVEN).longValue();
 
         return Quote.of(getCurrencyCode(), grossPrice);
@@ -212,7 +222,8 @@ public class PortfolioTransaction extends Transaction
     /**
      * Returns the gross price per share in the given currency. Converted is not
      * the price per share but the gross value before dividing by the number of
-     * shares in order minimize rounding errors.
+     * shares and the transaction-date multiplier in order minimize rounding
+     * errors.
      */
     public Quote getGrossPricePerShare(CurrencyConverter converter)
     {
@@ -230,6 +241,7 @@ public class PortfolioTransaction extends Transaction
                         .movePointRight(Values.Quote.precisionDeltaToMoney()) //
                         .movePointRight(Values.Share.precision()) //
                         .divide(BigDecimal.valueOf(getShares()), Values.MC) //
+                        .divide(getTransactionMultiplier(), Values.MC) //
                         .setScale(0, RoundingMode.HALF_EVEN).longValue();
         return Quote.of(converter.getTermCurrency(), grossPrice);
     }

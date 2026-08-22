@@ -369,6 +369,22 @@ public final class TransactionsViewer implements ModificationListener
         }).attachTo(column);
         support.addColumn(column);
 
+        column = new Column("multiplier", "Multiplikator", SWT.RIGHT, 80); //$NON-NLS-1$ //$NON-NLS-2$
+        column.setLabelProvider(new TransactionLabelProvider(t -> {
+            Security security = t.getSecurity();
+            return security != null && t.getDateTime() != null
+                            ? Double.toString(security.getMultiplier(t.getDateTime().toLocalDate()))
+                            : null;
+        }));
+        ColumnViewerSorter.create(e -> {
+            Transaction tx = ((TransactionPair<?>) e).getTransaction();
+            Security security = tx.getSecurity();
+            return security != null && tx.getDateTime() != null
+                            ? security.getMultiplier(tx.getDateTime().toLocalDate())
+                            : 1.0;
+        }).attachTo(column);
+        support.addColumn(column);
+
         column = new Column("5", Messages.ColumnAmount, SWT.RIGHT, 80); //$NON-NLS-1$
         column.setLabelProvider(new TransactionLabelProvider(t -> {
             Money m;

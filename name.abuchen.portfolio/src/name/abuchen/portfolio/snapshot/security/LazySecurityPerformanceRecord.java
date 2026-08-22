@@ -167,6 +167,23 @@ public final class LazySecurityPerformanceRecord extends BaseSecurityPerformance
         };
     }
 
+    /**
+     * Historical quote-scaled cost basis normalized with the multiplier that
+     * was effective on each transaction date. It is used only for entry-price
+     * display; monetary P&L calculations continue to use {@link #getCostMoney}.
+     */
+    private long getQuoteCost(CostMethod costMethod, TaxesAndFees taxesAndFees)
+    {
+        return switch (costMethod)
+        {
+            case FIFO -> taxesAndFees.isIncluded() ? costCalculation.get().fifoQuoteCost()
+                            : costCalculation.get().netFifoQuoteCost();
+
+            case MOVING_AVERAGE -> taxesAndFees.isIncluded() ? costCalculation.get().movingAverageQuoteCost()
+                            : costCalculation.get().netMovingAverageQuoteCost();
+        };
+    }
+
     private final LazyValue<DividendCalculationResult> dividendCalculation = new LazyValue<>(() -> {
         // ensure cost calculation is done (and has calculated
         // moving averages)
@@ -298,11 +315,12 @@ public final class LazySecurityPerformanceRecord extends BaseSecurityPerformance
 
     public Quote getCostPerSharesHeld(CostMethod costMethod, TaxesAndFees taxesAndFees)
     {
-        var sharesHeldForCostCalculation = costCalculation.get().sharesHeld();
-        Money cost = getCostMoney(costMethod, taxesAndFees);
+        var costs = costCalculation.get();
+        long quoteCost = getQuoteCost(costMethod, taxesAndFees);
+        String currencyCode = getCostMoney(costMethod, taxesAndFees).getCurrencyCode();
 
-        return Quote.of(cost.getCurrencyCode(), Math.round(cost.getAmount() / (double) sharesHeldForCostCalculation
-                        * Values.Share.factor() * Values.Quote.factorToMoney()));
+        return Quote.of(currencyCode,
+                        Math.round(quoteCost / (double) costs.sharesHeld() * Values.Share.factor()));
     }
 
     public Money getSumOfDividends()
@@ -434,5 +452,4 @@ public final class LazySecurityPerformanceRecord extends BaseSecurityPerformance
                 return Optional.empty();
         }
     }
-
 }
