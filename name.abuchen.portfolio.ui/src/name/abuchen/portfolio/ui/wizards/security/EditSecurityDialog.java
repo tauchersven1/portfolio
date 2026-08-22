@@ -37,6 +37,7 @@ import org.eclipse.swt.widgets.Text;
 import name.abuchen.portfolio.events.ChangeEventConstants;
 import name.abuchen.portfolio.events.SecurityChangeEvent;
 import name.abuchen.portfolio.model.Client;
+import name.abuchen.portfolio.model.OptionSymbolParser;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.ui.Images;
 import name.abuchen.portfolio.ui.Messages;
@@ -209,6 +210,11 @@ public class EditSecurityDialog extends Dialog
         });
 
         addPage(new SecurityMasterDataPage(model, bindings), Images.SECURITY.image());
+
+        // Restore the convenient option master-data mapping from OCC-style
+        // symbols (e.g. IAG260918C00017000). Explicitly stored derivative
+        // values always take precedence; only missing values are inferred.
+        OptionSymbolParser.populateMissingDerivativeProperties(model.getSecurity());
         multiplierPage = new SecurityMultiplierPage(model.getClient(), model.getSecurity());
         addPage(multiplierPage, null);
         addPage(new AttributesPage(model, bindings), null);
