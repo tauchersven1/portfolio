@@ -8,11 +8,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Parses OCC-style option symbols such as IAG260918C00017000.
+ * Parses option symbols used by OCC and Interactive Brokers/EUREX.
  */
 public final class OptionSymbolParser
 {
     private static final Pattern OCC_SYMBOL = Pattern.compile("^([A-Z0-9.\\-]{1,10})(\\d{2})(\\d{2})(\\d{2})([CP])(\\d{8})$"); //$NON-NLS-1$
+    private static final Pattern EUREX_IB_SYMBOL = Pattern.compile(
+                    "^([CP])\\s*([A-Z][A-Z0-9.\\-]{0,9}?)\\s*(\\d{4})(\\d{2})(\\d{2})\\s*([0-9]+(?:\\.[0-9]+)?)\\s*([A-Z])$"); //$NON-NLS-1$
 
     public static final class OptionData
     {
@@ -60,6 +62,16 @@ public final class OptionSymbolParser
             return Optional.empty();
 
         String normalized = symbol.trim().toUpperCase();
+
+        Optional<OptionData> occ = parseOcc(normalized);
+        if (occ.isPresent())
+            return occ;
+
+        return parseEurexIb(normalized);
+    }
+
+    private static Optional<OptionData> parseOcc(String normalized)
+    {
         Matcher matcher = OCC_SYMBOL.matcher(normalized);
         if (!matcher.matches())
             return Optional.empty();
@@ -75,6 +87,30 @@ public final class OptionSymbolParser
             String putCall = "C".equals(matcher.group(5)) ? "CALL" : "PUT"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 
             return Optional.of(new OptionData(matcher.group(1), expirationDate, putCall, strike));
+        }
+        catch (DateTimeException | NumberFormatException e)
+        {
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<OptionData> parseEurexIb(String normalized)
+    {
+        Matcher matcher = EUREX_IB_SYMBOL.matcher(normalized);
+        if (!matcher.matches())
+            return Optional.empty();
+
+        try
+        {
+            int year = Integer.parseInt(matcher.group(3));
+            int month = Integer.parseInt(matcher.group(4));
+            int day = Integer.parseInt(matcher.group(5));
+            LocalDate expirationDate = LocalDate.of(year, month, day);
+
+            BigDecimal strike = new BigDecimal(matcher.group(6)).stripTrailingZeros();
+            String putCall = "C".equals(matcher.group(1)) ? "CALL" : "PUT"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+
+            return Optional.of(new OptionData(matcher.group(2), expirationDate, putCall, strike));
         }
         catch (DateTimeException | NumberFormatException e)
         {
