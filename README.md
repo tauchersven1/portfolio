@@ -26,8 +26,9 @@ The implementation is intended as a **technical reference and discussion basis**
 - **Commit:** [`6dd92ff372feab24302442006e641a7acaf9a15e`](https://github.com/tauchersven1/portfolio/commit/6dd92ff372feab24302442006e641a7acaf9a15e)
 - **Stable snapshot branch:** [`poc/derivatives-build84`](https://github.com/tauchersven1/portfolio/tree/poc/derivatives-build84)
 - **Development branch:** [`agent/derivatives-official-release`](https://github.com/tauchersven1/portfolio/tree/agent/derivatives-official-release)
+- **Synthetic demo portfolio:** [`examples/Exposure_Derivatives_Demo_Build84.xml`](examples/Exposure_Derivatives_Demo_Build84.xml)
 
-The derivatives work on the development branch is based on Portfolio Performance 0.87.0. A small synthetic Portfolio Performance XML demo portfolio is available for reproducing the derivative and exposure examples; it contains only demonstration data and no personal portfolio information.
+The derivatives work on the development branch is based on Portfolio Performance 0.87.0. The demo XML contains only demonstration data and no personal portfolio information. It includes representative stocks/underlyings, vanilla options and knock-out certificates for reproducing the derivative and exposure examples.
 
 ## Status
 
