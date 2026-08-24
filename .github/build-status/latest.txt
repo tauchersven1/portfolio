@@ -1,6 +1,6 @@
-run_id=32689030188
-run_number=87
+run_id=32692122674
+run_number=88
 job_status=success
-source_sha=ed81c6b1fcae9ced9453275ee0f56d06064b533a
+source_sha=32434b900783bbb27c2aa8076a171f1867d12f55
 source_ref=agent/derivatives-integrated
 event=schedule
