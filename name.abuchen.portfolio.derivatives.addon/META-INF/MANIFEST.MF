@@ -2,7 +2,8 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: Portfolio Performance Derivatives Add-on
 Bundle-SymbolicName: name.abuchen.portfolio.derivatives.addon;singleton:=true
-Bundle-Version: 0.1.0
+Bundle-Version: 0.87.0
+X-Derivatives-Addon-Version: 0.1.0
 Bundle-Vendor: 3V Venari
 Bundle-RequiredExecutionEnvironment: JavaSE-21
 Bundle-ActivationPolicy: lazy
