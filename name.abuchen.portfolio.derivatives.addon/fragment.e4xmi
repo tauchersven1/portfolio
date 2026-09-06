@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="ASCII"?>
+<fragment:ModelFragments xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:application="http://www.eclipse.org/ui/2010/UIModel/application"
+    xmlns:fragment="http://www.eclipse.org/ui/2010/UIModel/fragment"
+    xmlns:menu="http://www.eclipse.org/ui/2010/UIModel/application/ui/menu"
+    xmi:id="_derivativesAddonFragments">
+
+  <fragments xsi:type="fragment:StringModelFragment"
+      xmi:id="_commandsFragment"
+      featurename="commands"
+      parentElementId="name.abuchen.portfolio.ui.application">
+    <elements xsi:type="application:Command"
+        xmi:id="_openExposureCommand"
+        elementId="name.abuchen.portfolio.derivatives.addon.command.openExposure"
+        commandName="Exposure Management Add-on"/>
+  </fragments>
+
+  <fragments xsi:type="fragment:StringModelFragment"
+      xmi:id="_handlersFragment"
+      featurename="handlers"
+      parentElementId="name.abuchen.portfolio.ui.application">
+    <elements xsi:type="application:Handler"
+        xmi:id="_openExposureHandler"
+        elementId="name.abuchen.portfolio.derivatives.addon.handler.openExposure"
+        contributionURI="bundleclass://name.abuchen.portfolio.derivatives.addon/name.abuchen.portfolio.derivatives.addon.OpenExposureHandler"
+        command="_openExposureCommand"/>
+  </fragments>
+
+  <fragments xsi:type="fragment:StringModelFragment"
+      xmi:id="_toolsMenuFragment"
+      featurename="children"
+      parentElementId="name.abuchen.portfolio.bootstrap.menu.tools">
+    <elements xsi:type="menu:HandledMenuItem"
+        xmi:id="_openExposureMenuItem"
+        elementId="name.abuchen.portfolio.derivatives.addon.menu.openExposure"
+        label="Exposure Management (Add-on)"
+        command="_openExposureCommand"/>
+  </fragments>
+</fragment:ModelFragments>
