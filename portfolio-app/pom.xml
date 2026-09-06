@@ -5,7 +5,7 @@
 
 	<groupId>name.abuchen.portfolio</groupId>
 	<artifactId>portfolio-app</artifactId>
-	<version>0.86.2-SNAPSHOT</version>
+	<version>0.87.0</version>
 	<packaging>pom</packaging>
 
 	<name>Portfolio Performance</name>
@@ -50,6 +50,7 @@
 		<module>../name.abuchen.portfolio.junit</module>
 		<module>../name.abuchen.portfolio.tests</module>
 		<module>../name.abuchen.portfolio.ui</module>
+		<module>../name.abuchen.portfolio.derivatives.addon</module>
 		<module>../name.abuchen.portfolio.ui.tests</module>
 		<module>../name.abuchen.portfolio.feature</module>
 		<module>../features/org.eclipse.swt.patch</module>

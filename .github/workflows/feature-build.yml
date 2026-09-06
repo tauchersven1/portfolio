@@ -1,0 +1,116 @@
+name: Feature Build
+
+on:
+  push:
+    branches:
+      - agent/derivatives-addon-poc
+    paths-ignore:
+      - '.github/build-status/**'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Full Maven Build and Windows Artifact
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Cache Maven artifacts
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-mvn-${{ hashFiles('**/pom.xml', '**/*.target') }}
+          restore-keys: |
+            ${{ runner.os }}-mvn-
+
+      - name: Set up Zulu JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: 21
+          distribution: zulu
+
+      - name: Set up Maven 3.9.16
+        shell: pwsh
+        run: |
+          $version = '3.9.16'
+          $base = "https://archive.apache.org/dist/maven/maven-3/$version/binaries"
+          $zip = "$env:RUNNER_TEMP/apache-maven-$version-bin.zip"
+          $shaFile = "$zip.sha512"
+          Invoke-WebRequest "$base/apache-maven-$version-bin.zip" -OutFile $zip
+          Invoke-WebRequest "$base/apache-maven-$version-bin.zip.sha512" -OutFile $shaFile
+          $expected = ((Get-Content $shaFile -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+          $actual = (Get-FileHash $zip -Algorithm SHA512).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Maven SHA-512 mismatch" }
+          $target = "$env:RUNNER_TEMP/maven"
+          Expand-Archive $zip -DestinationPath $target -Force
+          $mavenHome = Join-Path $target "apache-maven-$version"
+          Add-Content $env:GITHUB_PATH (Join-Path $mavenHome 'bin')
+          "MAVEN_HOME=$mavenHome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Full build and tests
+        shell: pwsh
+        run: |
+          mvn verify --batch-mode --file portfolio-app/pom.xml 2>&1 | Tee-Object -FilePath maven-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Maven build log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: maven-build-log
+          path: maven-build.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Bundle Windows Java runtime
+        if: success()
+        shell: pwsh
+        run: |
+          $product = 'portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio'
+          $jre = Join-Path $product 'jre'
+          New-Item -ItemType Directory -Force -Path $jre | Out-Null
+          Copy-Item -Path (Join-Path $env:JAVA_HOME '*') -Destination $jre -Recurse -Force
+          if (-not (Test-Path (Join-Path $jre 'bin/javaw.exe'))) {
+            throw 'Bundled runtime does not contain jre/bin/javaw.exe'
+          }
+          Get-Item (Join-Path $jre 'bin/javaw.exe')
+
+      - name: Show packaged products
+        if: success()
+        shell: pwsh
+        run: |
+          Get-ChildItem 'portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio' | Select-Object Name
+
+      - name: Upload Windows x86_64 build
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: PortfolioPerformance-Windows-x86_64-${{ github.run_number }}
+          path: portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish build status marker
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path '.github/build-status' | Out-Null
+          @"
+          run_id=${{ github.run_id }}
+          run_number=${{ github.run_number }}
+          job_status=${{ job.status }}
+          source_sha=${{ github.sha }}
+          source_ref=${{ github.ref_name }}
+          event=push
+          "@ | Set-Content -Path '.github/build-status/latest.txt' -Encoding utf8
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add '.github/build-status/latest.txt'
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { exit 0 }
+          git commit -m "Record Feature Build #${{ github.run_number }} status [skip ci]"
+          git push origin "HEAD:${{ github.ref_name }}"
