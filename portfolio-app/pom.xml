@@ -50,6 +50,7 @@
 		<module>../name.abuchen.portfolio.junit</module>
 		<module>../name.abuchen.portfolio.tests</module>
 		<module>../name.abuchen.portfolio.ui</module>
+		<module>../name.abuchen.portfolio.derivatives.addon</module>
 		<module>../name.abuchen.portfolio.ui.tests</module>
 		<module>../name.abuchen.portfolio.feature</module>
 		<module>../features/org.eclipse.swt.patch</module>
