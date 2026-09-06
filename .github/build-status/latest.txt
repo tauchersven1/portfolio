@@ -1,6 +1,6 @@
-run_id=34029392415
-run_number=97
-job_status=failure
-source_sha=820cefad0f894866b0439201573b37acc64ccbc2
+run_id=34029669304
+run_number=98
+job_status=success
+source_sha=333d8aa9207c9f147724adfecafcd08f46d1e012
 source_ref=agent/derivatives-addon-poc
 event=push
