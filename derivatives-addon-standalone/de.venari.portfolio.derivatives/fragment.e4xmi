@@ -29,15 +29,18 @@
             xmi:id="_viewMenu"
             featurename="children"
             parentElementId="name.abuchen.portfolio.ui.menu.view">
-  <elements xsi:type="menu:Menu"
-            xmi:id="_derivativesMenu"
-            elementId="de.venari.portfolio.derivatives.menu"
-            label="Derivate">
-   <children xsi:type="menu:HandledMenuItem"
-             xmi:id="_openExposureMenuItem"
-             elementId="de.venari.portfolio.derivatives.menu.openExposure"
-             label="Exposure Management"
-             command="_openExposureCommand"/>
-  </elements>
+  <elements xsi:type="menu:MenuSeparator"
+            xmi:id="_derivativesSeparator"
+            elementId="de.venari.portfolio.derivatives.menu.separator"/>
+  <elements xsi:type="menu:DirectMenuItem"
+            xmi:id="_derivativesHeader"
+            elementId="de.venari.portfolio.derivatives.menu.header"
+            label="Derivate"
+            enabled="false"/>
+  <elements xsi:type="menu:HandledMenuItem"
+            xmi:id="_openExposureMenuItem"
+            elementId="de.venari.portfolio.derivatives.menu.openExposure"
+            label="Exposure Management"
+            command="_openExposureCommand"/>
  </fragments>
 </fragment:ModelFragments>
