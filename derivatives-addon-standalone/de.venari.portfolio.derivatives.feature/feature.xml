@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feature id="de.venari.portfolio.derivatives.feature"
+         label="Portfolio Performance Derivatives Add-on"
+         version="0.1.0.qualifier"
+         provider-name="3V Venari">
+ <description>
+  Independent derivatives extension for Portfolio Performance.
+ </description>
+ <license url="https://www.eclipse.org/legal/epl-2.0/">
+  Eclipse Public License 2.0
+ </license>
+ <plugin id="de.venari.portfolio.derivatives" version="0.0.0"/>
+</feature>
