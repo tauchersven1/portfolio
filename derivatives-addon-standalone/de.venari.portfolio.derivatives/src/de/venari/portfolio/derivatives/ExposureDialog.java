@@ -86,7 +86,9 @@ public class ExposureDialog extends Dialog
         addColumn("Exposure", 180, row -> Values.Money.format(row.exposure())); //$NON-NLS-1$
 
         table.getTable().addListener(SWT.MouseDoubleClick, event -> editMultiplier());
-        refresh();
+
+        table.setInput(List.of());
+        getShell().getDisplay().asyncExec(this::refresh);
 
         return container;
     }
