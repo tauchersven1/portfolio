@@ -7,6 +7,10 @@ on:
     paths:
       - 'derivatives-addon-standalone/**'
       - '.github/workflows/derivatives-addon-standalone.yml'
+  pull_request:
+    paths:
+      - 'derivatives-addon-standalone/**'
+      - '.github/workflows/derivatives-addon-standalone.yml'
   workflow_dispatch:
 
 jobs:
