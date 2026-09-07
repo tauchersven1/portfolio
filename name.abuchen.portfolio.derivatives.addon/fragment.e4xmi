@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="ASCII"?>
+<fragment:ModelFragments xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:fragment="http://www.eclipse.org/ui/2010/UIModel/fragment"
+    xmlns:menu="http://www.eclipse.org/ui/2010/UIModel/application/ui/menu"
+    xmi:id="_derivativesAddonFragments">
+
+  <fragments xsi:type="fragment:StringModelFragment"
+      xmi:id="_derivativesMenuFragment"
+      featurename="children"
+      parentElementId="name.abuchen.portfolio.ui.menu.0">
+    <elements xsi:type="menu:Menu"
+        xmi:id="_derivativesMenu"
+        elementId="name.abuchen.portfolio.derivatives.addon.menu"
+        label="Derivatives">
+      <children xsi:type="menu:DirectMenuItem"
+          xmi:id="_openExposureMenuItem"
+          elementId="name.abuchen.portfolio.derivatives.addon.menu.openExposure"
+          label="Exposure Management"
+          contributionURI="bundleclass://name.abuchen.portfolio.derivatives.addon/name.abuchen.portfolio.derivatives.addon.OpenExposureHandler"/>
+    </elements>
+  </fragments>
+</fragment:ModelFragments>
