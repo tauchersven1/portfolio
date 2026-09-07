@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="ASCII"?>
+<fragment:ModelFragments xmi:version="2.0"
+ xmlns:xmi="http://www.omg.org/XMI"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xmlns:commands="http://www.eclipse.org/ui/2010/UIModel/application/commands"
+ xmlns:fragment="http://www.eclipse.org/ui/2010/UIModel/fragment"
+ xmlns:menu="http://www.eclipse.org/ui/2010/UIModel/application/ui/menu"
+ xmi:id="_derivativesFragments">
+ <fragments xsi:type="fragment:StringModelFragment"
+            xmi:id="_commands"
+            featurename="commands"
+            parentElementId="name.abuchen.portfolio.ui.application">
+  <elements xsi:type="commands:Command"
+            xmi:id="_openExposureCommand"
+            elementId="de.venari.portfolio.derivatives.command.openExposure"
+            commandName="Exposure Management"/>
+ </fragments>
+ <fragments xsi:type="fragment:StringModelFragment"
+            xmi:id="_handlers"
+            featurename="handlers"
+            parentElementId="name.abuchen.portfolio.ui.application">
+  <elements xsi:type="commands:Handler"
+            xmi:id="_openExposureHandler"
+            elementId="de.venari.portfolio.derivatives.handler.openExposure"
+            contributionURI="bundleclass://de.venari.portfolio.derivatives/de.venari.portfolio.derivatives.OpenExposureHandler"
+            command="_openExposureCommand"/>
+ </fragments>
+ <fragments xsi:type="fragment:StringModelFragment"
+            xmi:id="_viewMenu"
+            featurename="children"
+            parentElementId="name.abuchen.portfolio.ui.menu.view">
+  <elements xsi:type="menu:HandledMenuItem"
+            xmi:id="_openExposureMenuItem"
+            elementId="de.venari.portfolio.derivatives.menu.openExposure"
+            label="Exposure Management"
+            command="_openExposureCommand"/>
+ </fragments>
+</fragment:ModelFragments>
