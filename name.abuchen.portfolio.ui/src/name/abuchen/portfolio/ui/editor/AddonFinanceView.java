@@ -5,6 +5,7 @@ import jakarta.inject.Inject;
 import org.eclipse.e4.core.contexts.IEclipseContext;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Shell;
 
 import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
 import name.abuchen.portfolio.ui.AddonView;
@@ -40,6 +41,8 @@ public class AddonFinanceView extends AbstractFinanceView
             throw new IllegalStateException("Cannot create add-on view " + descriptor.id(), e); //$NON-NLS-1$
         }
 
+        Shell viewShell = parent.getShell();
+
         AddonViewContext addonContext = new AddonViewContext()
         {
             @Override
@@ -55,9 +58,9 @@ public class AddonFinanceView extends AbstractFinanceView
             }
 
             @Override
-            public org.eclipse.swt.widgets.Shell getShell()
+            public Shell getShell()
             {
-                return AddonFinanceView.this.getActiveShell();
+                return viewShell;
             }
 
             @Override
