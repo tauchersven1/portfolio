@@ -4,7 +4,6 @@ Bundle-Name: Portfolio Performance Derivatives Add-on
 Bundle-SymbolicName: de.venari.portfolio.derivatives;singleton:=true
 Bundle-Version: 0.1.0.qualifier
 Bundle-Vendor: 3V Venari
-Model-Fragment: fragment.e4xmi
 Bundle-RequiredExecutionEnvironment: JavaSE-21
 Bundle-ActivationPolicy: lazy
 Require-Bundle: name.abuchen.portfolio,
