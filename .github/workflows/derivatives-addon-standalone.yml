@@ -6,10 +6,12 @@ on:
       - agent/derivatives-addon-standalone
     paths:
       - 'derivatives-addon-standalone/**'
+      - 'name.abuchen.portfolio.ui/**'
       - '.github/workflows/derivatives-addon-standalone.yml'
   pull_request:
     paths:
       - 'derivatives-addon-standalone/**'
+      - 'name.abuchen.portfolio.ui/**'
       - '.github/workflows/derivatives-addon-standalone.yml'
   workflow_dispatch:
 
@@ -25,6 +27,25 @@ jobs:
       - uses: stCarolas/setup-maven@v5
         with:
           maven-version: 3.9.16
+      - name: Build Portfolio Performance bridge repository
+        run: mvn --batch-mode --file portfolio-app/pom.xml verify
+
+      - name: Point add-on target at local bridge repository
+        shell: bash
+        run: |
+          test -d "$GITHUB_WORKSPACE/portfolio-product/target/repository"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          target = Path("derivatives-addon-standalone/derivatives-target-definition/derivatives-target-definition.target")
+          text = target.read_text(encoding="utf-8")
+          text = text.replace(
+              "https://updates.portfolio-performance.info/portfolio/",
+              Path(os.environ["GITHUB_WORKSPACE"], "portfolio-product", "target", "repository").as_uri()
+          )
+          target.write_text(text, encoding="utf-8")
+          PY
+
       - name: Build standalone plugin and p2 repository
         run: mvn --batch-mode --file derivatives-addon-standalone/pom.xml clean verify
       - name: Package p2 update site
