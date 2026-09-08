@@ -183,7 +183,7 @@ public class ExposureReportView implements AddonView
             return;
 
         valuationDate = LocalDate.now();
-        converter = new CurrencyConverterImpl(factory, getClient().getBaseCurrency());
+        converter = new CurrencyConverterImpl(context.getExchangeRateProviderFactory(), context.getClient().getBaseCurrency());
         ClientSnapshot snapshot = ClientSnapshot.create(context.getClient(), converter, valuationDate);
 
         List<Row> answer = new ArrayList<>();
