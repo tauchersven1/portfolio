@@ -13,8 +13,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-import jakarta.inject.Inject;
-
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
 import org.eclipse.swt.SWT;
@@ -35,14 +33,14 @@ import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.CurrencyConverterImpl;
-import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
 import name.abuchen.portfolio.money.Money;
 import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.snapshot.AssetPosition;
 import name.abuchen.portfolio.snapshot.ClientSnapshot;
-import name.abuchen.portfolio.ui.editor.AbstractFinanceView;
+import name.abuchen.portfolio.ui.AddonView;
+import name.abuchen.portfolio.ui.AddonViewContext;
 
-public class ExposureReportView extends AbstractFinanceView
+public class ExposureReportView implements AddonView
 {
     private static final String ALL = "All"; //$NON-NLS-1$
     private static final String NO_MATURITY = "No maturity"; //$NON-NLS-1$
@@ -55,8 +53,7 @@ public class ExposureReportView extends AbstractFinanceView
     {
     }
 
-    @Inject
-    private ExchangeRateProviderFactory factory;
+    private AddonViewContext context;
 
     private Combo instrumentType;
     private Combo direction;
@@ -77,18 +74,13 @@ public class ExposureReportView extends AbstractFinanceView
     private List<Row> rows = List.of();
 
     @Override
-    protected String getDefaultTitle()
+    public Control createBody(Composite parent, AddonViewContext context)
     {
-        return "Exposure"; //$NON-NLS-1$
-    }
-
-    @Override
-    protected Control createBody(Composite parent)
-    {
+        this.context = context;
         Composite body = new Composite(parent, SWT.NONE);
         GridLayoutFactory.fillDefaults().margins(8, 8).spacing(8, 8).applyTo(body);
 
-        converter = new CurrencyConverterImpl(factory, getClient().getBaseCurrency());
+        converter = new CurrencyConverterImpl(context.getExchangeRateProviderFactory(), context.getClient().getBaseCurrency());
 
         createFilters(body);
         createKpis(body);
@@ -192,7 +184,7 @@ public class ExposureReportView extends AbstractFinanceView
 
         valuationDate = LocalDate.now();
         converter = new CurrencyConverterImpl(factory, getClient().getBaseCurrency());
-        ClientSnapshot snapshot = ClientSnapshot.create(getClient(), converter, valuationDate);
+        ClientSnapshot snapshot = ClientSnapshot.create(context.getClient(), converter, valuationDate);
 
         List<Row> answer = new ArrayList<>();
         snapshot.getAssetPositions().forEach(asset -> addRow(answer, asset));
@@ -344,7 +336,7 @@ public class ExposureReportView extends AbstractFinanceView
         int legendX = left;
         for (int i = 0; i < groupList.size(); i++)
         {
-            Color color = getActiveShell().getDisplay().getSystemColor(systemColors[i % systemColors.length]);
+            Color color = context.getShell().getDisplay().getSystemColor(systemColors[i % systemColors.length]);
             gc.setBackground(color);
             gc.fillRectangle(legendX, 10, 12, 12);
             gc.drawText(groupList.get(i), legendX + 17, 8, true);
@@ -370,7 +362,7 @@ public class ExposureReportView extends AbstractFinanceView
                     continue;
 
                 int height = Math.max(1, (int) Math.round(Math.abs(value) * (double) plotHeight / span));
-                gc.setBackground(getActiveShell().getDisplay()
+                gc.setBackground(context.getShell().getDisplay()
                                 .getSystemColor(systemColors[groupIndex % systemColors.length]));
 
                 if (value > 0)
