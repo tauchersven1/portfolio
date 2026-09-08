@@ -6,8 +6,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
-import jakarta.inject.Inject;
-
 import org.eclipse.jface.dialogs.InputDialog;
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
@@ -24,33 +22,26 @@ import org.eclipse.swt.widgets.Control;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.CurrencyConverterImpl;
-import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
 import name.abuchen.portfolio.money.Money;
 import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.snapshot.AssetPosition;
 import name.abuchen.portfolio.snapshot.ClientSnapshot;
-import name.abuchen.portfolio.ui.editor.AbstractFinanceView;
+import name.abuchen.portfolio.ui.AddonView;
+import name.abuchen.portfolio.ui.AddonViewContext;
 
-public class ExposureManagementView extends AbstractFinanceView
+public class ExposureManagementView implements AddonView
 {
     private record Row(Security security, Money marketValue, BigDecimal multiplier, Money exposure)
     {
     }
 
-    @Inject
-    private ExchangeRateProviderFactory factory;
-
+    private AddonViewContext context;
     private TableViewer table;
 
     @Override
-    protected String getDefaultTitle()
+    public Control createBody(Composite parent, AddonViewContext context)
     {
-        return "Exposure Management"; //$NON-NLS-1$
-    }
-
-    @Override
-    protected Control createBody(Composite parent)
-    {
+        this.context = context;
         Composite body = new Composite(parent, SWT.NONE);
         GridLayoutFactory.fillDefaults().margins(8, 8).applyTo(body);
 
@@ -97,8 +88,8 @@ public class ExposureManagementView extends AbstractFinanceView
             return;
 
         LocalDate date = LocalDate.now();
-        CurrencyConverter converter = new CurrencyConverterImpl(factory, getClient().getBaseCurrency());
-        ClientSnapshot snapshot = ClientSnapshot.create(getClient(), converter, date);
+        CurrencyConverter converter = new CurrencyConverterImpl(context.getExchangeRateProviderFactory(), context.getClient().getBaseCurrency());
+        ClientSnapshot snapshot = ClientSnapshot.create(context.getClient(), converter, date);
 
         List<Row> rows = new ArrayList<>();
         snapshot.getAssetPositions().forEach(asset -> addRow(rows, asset));
@@ -124,7 +115,7 @@ public class ExposureManagementView extends AbstractFinanceView
         if (row == null)
             return;
 
-        InputDialog dialog = new InputDialog(getActiveShell(), "Multiplier", //$NON-NLS-1$
+        InputDialog dialog = new InputDialog(context.getShell(), "Multiplier", //$NON-NLS-1$
                         "Multiplier for " + row.security().getName(), row.multiplier().toPlainString(), value -> { //$NON-NLS-1$
                             try
                             {
@@ -141,7 +132,10 @@ public class ExposureManagementView extends AbstractFinanceView
             return;
 
         if (AddonMultiplier.set(row.security(), new BigDecimal(dialog.getValue())))
-            getClient().touch();
+        {
+            context.getClient().touch();
+            context.markDirty();
+        }
 
         refresh();
     }
