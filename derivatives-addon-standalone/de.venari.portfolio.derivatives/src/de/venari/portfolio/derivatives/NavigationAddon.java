@@ -3,7 +3,9 @@ package de.venari.portfolio.derivatives;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.inject.Inject;
@@ -12,9 +14,6 @@ import jakarta.inject.Named;
 import org.eclipse.e4.core.di.annotations.Optional;
 import org.eclipse.e4.ui.model.application.ui.basic.MPart;
 import org.eclipse.e4.ui.services.IServiceConstants;
-
-import name.abuchen.portfolio.ui.editor.AbstractFinanceView;
-import name.abuchen.portfolio.ui.editor.Navigation;
 
 public class NavigationAddon
 {
@@ -33,48 +32,42 @@ public class NavigationAddon
 
         try
         {
-            Method getClientInput = part.getObject().getClass().getMethod("getClientInput");
+            Method getClientInput = part.getObject().getClass().getMethod("getClientInput"); //$NON-NLS-1$
             Object clientInput = getClientInput.invoke(part.getObject());
             if (clientInput == null)
                 return;
 
-            Method getNavigation = clientInput.getClass().getMethod("getNavigation");
-            Object value = getNavigation.invoke(clientInput);
-            if (value instanceof Navigation navigation)
+            Method getNavigation = clientInput.getClass().getMethod("getNavigation"); //$NON-NLS-1$
+            Object navigation = getNavigation.invoke(clientInput);
+            if (navigation != null)
                 install(navigation);
         }
         catch (ReflectiveOperationException ignore)
         {
-            // active part is not a PortfolioPart
+            // active part is not a PortfolioPart or PP internals changed
         }
     }
 
-    private void install(Navigation navigation) throws ReflectiveOperationException
+    private void install(Object navigation) throws ReflectiveOperationException
     {
-        Navigation.Item reports = navigation.getRoots()
-                        .filter(item -> "Berichte".equals(item.getLabel()) || "Reports".equals(item.getLabel()))
-                        .findFirst().orElse(null);
-
-        if (reports != null && reports.getChildren().noneMatch(item -> "Exposure".equals(item.getLabel())))
+        Object reports = findRootByLabel(navigation, "Berichte", "Reports"); //$NON-NLS-1$ //$NON-NLS-2$
+        if (reports != null && findChildByLabel(reports, "Exposure") == null) //$NON-NLS-1$
         {
-            Navigation.Item exposureReport = createViewItem("Exposure", ExposureReportView.class);
+            Object exposureReport = createViewItem("Exposure", ExposureReportView.class); //$NON-NLS-1$
             addChild(reports, exposureReport);
             notifyChanged(navigation, exposureReport);
         }
 
-        Navigation.Item derivatives = navigation.getRoots()
-                        .filter(item -> "Derivate".equals(item.getLabel()))
-                        .findFirst().orElse(null);
-
+        Object derivatives = findRootByLabel(navigation, "Derivate"); //$NON-NLS-1$
         if (derivatives == null)
         {
-            derivatives = createSectionItem("Derivate");
+            derivatives = createSectionItem("Derivate"); //$NON-NLS-1$
             addRoot(navigation, derivatives);
         }
 
-        if (derivatives.getChildren().noneMatch(item -> "Exposure Management".equals(item.getLabel())))
+        if (findChildByLabel(derivatives, "Exposure Management") == null) //$NON-NLS-1$
         {
-            Navigation.Item management = createViewItem("Exposure Management", ExposureManagementView.class);
+            Object management = createViewItem("Exposure Management", ExposureManagementView.class); //$NON-NLS-1$
             addChild(derivatives, management);
             notifyChanged(navigation, management);
         }
@@ -84,43 +77,90 @@ public class NavigationAddon
         }
     }
 
-    private Navigation.Item createSectionItem(String label) throws ReflectiveOperationException
+    private Object findRootByLabel(Object navigation, String... labels) throws ReflectiveOperationException
     {
-        Constructor<Navigation.Item> constructor = Navigation.Item.class.getDeclaredConstructor(String.class);
+        Method getRoots = navigation.getClass().getMethod("getRoots"); //$NON-NLS-1$
+        Object result = getRoots.invoke(navigation);
+        if (!(result instanceof Stream<?> roots))
+            return null;
+
+        try (roots)
+        {
+            return roots.filter(item -> hasLabel(item, labels)).findFirst().orElse(null);
+        }
+    }
+
+    private Object findChildByLabel(Object parent, String label) throws ReflectiveOperationException
+    {
+        Method getChildren = parent.getClass().getMethod("getChildren"); //$NON-NLS-1$
+        Object result = getChildren.invoke(parent);
+        if (!(result instanceof Stream<?> children))
+            return null;
+
+        try (children)
+        {
+            return children.filter(item -> hasLabel(item, label)).findFirst().orElse(null);
+        }
+    }
+
+    private boolean hasLabel(Object item, String... labels)
+    {
+        try
+        {
+            Method getLabel = item.getClass().getMethod("getLabel"); //$NON-NLS-1$
+            Object value = getLabel.invoke(item);
+            for (String label : labels)
+                if (label.equals(value))
+                    return true;
+        }
+        catch (ReflectiveOperationException ignore)
+        {
+            // not a navigation item
+        }
+        return false;
+    }
+
+    private Object createSectionItem(String label) throws ReflectiveOperationException
+    {
+        Class<?> itemClass = Class.forName("name.abuchen.portfolio.ui.editor.Navigation$Item"); //$NON-NLS-1$
+        Constructor<?> constructor = itemClass.getDeclaredConstructor(String.class);
         constructor.setAccessible(true);
         return constructor.newInstance(label);
     }
 
-    private Navigation.Item createViewItem(String label, Class<? extends AbstractFinanceView> view)
-                    throws ReflectiveOperationException
+    private Object createViewItem(String label, Class<?> view) throws ReflectiveOperationException
     {
-        Constructor<Navigation.Item> constructor = Navigation.Item.class.getDeclaredConstructor(String.class, Class.class);
+        Class<?> itemClass = Class.forName("name.abuchen.portfolio.ui.editor.Navigation$Item"); //$NON-NLS-1$
+        Constructor<?> constructor = itemClass.getDeclaredConstructor(String.class, Class.class);
         constructor.setAccessible(true);
         return constructor.newInstance(label, view);
     }
 
-    private void addChild(Navigation.Item parent, Navigation.Item child) throws ReflectiveOperationException
+    private void addChild(Object parent, Object child) throws ReflectiveOperationException
     {
-        Method add = Navigation.Item.class.getDeclaredMethod("add", Navigation.Item.class);
+        Method add = parent.getClass().getDeclaredMethod("add", parent.getClass()); //$NON-NLS-1$
         add.setAccessible(true);
         add.invoke(parent, child);
     }
 
     @SuppressWarnings("unchecked")
-    private void addRoot(Navigation navigation, Navigation.Item root) throws ReflectiveOperationException
+    private void addRoot(Object navigation, Object root) throws ReflectiveOperationException
     {
-        Field roots = Navigation.class.getDeclaredField("roots");
+        Field roots = navigation.getClass().getDeclaredField("roots"); //$NON-NLS-1$
         roots.setAccessible(true);
-        ((List<Navigation.Item>) roots.get(navigation)).add(root);
+        ((List<Object>) roots.get(navigation)).add(root);
         notifyChanged(navigation, root);
     }
 
     @SuppressWarnings("unchecked")
-    private void notifyChanged(Navigation navigation, Navigation.Item item) throws ReflectiveOperationException
+    private void notifyChanged(Object navigation, Object item) throws ReflectiveOperationException
     {
-        Field listeners = Navigation.class.getDeclaredField("listeners");
+        Field listeners = navigation.getClass().getDeclaredField("listeners"); //$NON-NLS-1$
         listeners.setAccessible(true);
-        for (Navigation.Listener listener : List.copyOf((List<Navigation.Listener>) listeners.get(navigation)))
-            listener.changed(item);
+        for (Object listener : new ArrayList<>((List<Object>) listeners.get(navigation)))
+        {
+            Method changed = listener.getClass().getMethod("changed", item.getClass()); //$NON-NLS-1$
+            changed.invoke(listener, item);
+        }
     }
 }
