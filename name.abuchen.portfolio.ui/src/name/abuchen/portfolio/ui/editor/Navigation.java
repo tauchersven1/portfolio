@@ -15,6 +15,9 @@ import java.util.stream.Stream;
 
 import jakarta.inject.Inject;
 
+import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IConfigurationElement;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.e4.core.contexts.IEclipseContext;
 import org.eclipse.e4.ui.services.IStylingEngine;
 import org.eclipse.jface.action.IMenuManager;
@@ -30,6 +33,10 @@ import name.abuchen.portfolio.model.Taxonomy;
 import name.abuchen.portfolio.model.TaxonomyJSONExporter;
 import name.abuchen.portfolio.model.TaxonomyTemplate;
 import name.abuchen.portfolio.model.Watchlist;
+import name.abuchen.portfolio.ui.AddonView;
+import name.abuchen.portfolio.ui.NavigationExtension;
+import name.abuchen.portfolio.ui.NavigationExtensionRegistry;
+import name.abuchen.portfolio.ui.PortfolioPlugin;
 import name.abuchen.portfolio.ui.Images;
 import name.abuchen.portfolio.ui.Messages;
 import name.abuchen.portfolio.ui.UIConstants;
@@ -212,11 +219,74 @@ public final class Navigation
     @Inject
     /* protected */ Navigation(Client client)
     {
+        Map<String, Item> extensionSections = new HashMap<>();
+
         createGeneralDataSection(client);
+        extensionSections.put(NavigationExtensionRegistry.SECTION_SECURITIES, roots.getLast());
+
         createMasterDataSection();
+        extensionSections.put(NavigationExtensionRegistry.SECTION_MASTER_DATA, roots.getLast());
+
         createPerformanceSection();
+        extensionSections.put(NavigationExtensionRegistry.SECTION_REPORTS, roots.getLast());
+
         createTaxonomyDataSection(client);
+        extensionSections.put(NavigationExtensionRegistry.SECTION_TAXONOMIES, roots.getLast());
+
         createMiscSection();
+        extensionSections.put(NavigationExtensionRegistry.SECTION_GENERAL_DATA, roots.getLast());
+
+        loadNavigationExtensions(extensionSections);
+    }
+
+    private void loadNavigationExtensions(Map<String, Item> sections)
+    {
+        NavigationExtensionRegistry registry = new NavigationExtensionRegistry()
+        {
+            @Override
+            public void addSection(String id, String label)
+            {
+                if (id == null || id.isBlank() || label == null || label.isBlank() || sections.containsKey(id))
+                    return;
+
+                Item section = new Item(label);
+                roots.add(section);
+                sections.put(id, section);
+            }
+
+            @Override
+            public void addView(String sectionId, String id, String label, Class<? extends AddonView> viewClass)
+            {
+                Item section = sections.get(sectionId);
+                if (section == null || id == null || id.isBlank() || label == null || label.isBlank()
+                                || viewClass == null)
+                    return;
+
+                Item item = new Item(label, AddonFinanceView.class, true);
+                item.setParameter(new AddonViewDescriptor(id, label, viewClass));
+                section.add(item);
+            }
+        };
+
+        IConfigurationElement[] elements = Platform.getExtensionRegistry()
+                        .getConfigurationElementsFor(PortfolioPlugin.PLUGIN_ID, "navigation"); //$NON-NLS-1$
+
+        for (IConfigurationElement element : elements)
+        {
+            if (!"contributor".equals(element.getName())) //$NON-NLS-1$
+                continue;
+
+            try
+            {
+                Object extension = element.createExecutableExtension("class"); //$NON-NLS-1$
+                if (extension instanceof NavigationExtension navigationExtension)
+                    navigationExtension.contribute(registry);
+            }
+            catch (CoreException e)
+            {
+                PortfolioPlugin.log(e);
+            }
+        }
     }
 
     public Stream<Item> getRoots()
