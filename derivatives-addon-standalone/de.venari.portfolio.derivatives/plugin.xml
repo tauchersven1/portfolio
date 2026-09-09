@@ -3,4 +3,7 @@
  <extension point="name.abuchen.portfolio.ui.navigation">
   <contributor class="de.venari.portfolio.derivatives.DerivativesNavigationExtension"/>
  </extension>
+ <extension point="name.abuchen.portfolio.ui.securityPages">
+  <page class="de.venari.portfolio.derivatives.DerivativeSecurityPage"/>
+ </extension>
 </plugin>
