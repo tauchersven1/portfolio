@@ -217,7 +217,25 @@ public class DerivativeSecurityPage implements AddonSecurityPage
     private void updateKnockOutState()
     {
         if (knockOutLevel != null)
+        {
             knockOutLevel.setEnabled(knockOutCertificate.getSelection());
+            if (knockOutCertificate.getSelection())
+                knockOutLevel.initialize(defaultDate(), decimalValue(strike.getText()));
+        }
+    }
+
+    private BigDecimal decimalValue(String value)
+    {
+        if (value == null || value.isBlank())
+            return null;
+        try
+        {
+            return new BigDecimal(value.trim().replace(',', '.'));
+        }
+        catch (NumberFormatException ignore)
+        {
+            return null;
+        }
     }
 
     private void updateFxState()
@@ -350,6 +368,15 @@ public class DerivativeSecurityPage implements AddonSecurityPage
                 TableItem item = new TableItem(table, SWT.NONE);
                 item.setText(new String[] { entry.date().toString(), entry.value().toPlainString() });
             }
+        }
+
+        private void initialize(LocalDate date, BigDecimal value)
+        {
+            if (value == null || table.getItemCount() > 0)
+                return;
+
+            TableItem item = new TableItem(table, SWT.NONE);
+            item.setText(new String[] { date.toString(), value.stripTrailingZeros().toPlainString() });
         }
 
         private String serialize()
