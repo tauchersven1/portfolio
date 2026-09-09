@@ -6,6 +6,10 @@
          id="navigation"
          name="Portfolio Performance Navigation Extensions">
    </extension-point>
+   <extension-point
+         id="securityPages"
+         name="Portfolio Performance Security Editor Pages">
+   </extension-point>
 
    <extension
          point="org.eclipse.core.runtime.preferences">
