@@ -1,6 +1,7 @@
 package de.venari.portfolio.derivatives;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityProperty;
@@ -15,6 +16,11 @@ public final class AddonMultiplier
 
     public static BigDecimal get(Security security)
     {
+        String history = security.getPropertyValue(SecurityProperty.Type.FEED,
+                        "derivatives-addon.multiplierHistory").orElse(null); //$NON-NLS-1$
+        if (history != null)
+            return DatedValueSeries.valueAt(history, LocalDate.now()).orElse(BigDecimal.ONE);
+
         return security.getPropertyValue(SecurityProperty.Type.FEED, PROPERTY_NAME)
                         .map(AddonMultiplier::parse)
                         .orElse(BigDecimal.ONE);
