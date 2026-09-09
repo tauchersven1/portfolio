@@ -36,7 +36,7 @@ public class DerivativeSecurityPage implements AddonSecurityPage
     private Client client;
     private TabFolder instrumentPages;
     private Text underlying, exchange, contractSymbol, expirationDate, underlyingCurrency, pricingCurrency;
-    private Text contractMonth, firstNoticeDate, lastTradingDate, strike;
+    private Text contractMonth, firstNoticeDate, lastTradingDate, strike, issuer;
     private Combo putCall, exerciseStyle;
     private Button fxInstrument, regularOption, knockOutCertificate;
     private DatedValueEditor multiplier, delta, knockOutLevel;
@@ -113,6 +113,8 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         strike = text(options, "Basispreis"); //$NON-NLS-1$
         exerciseStyle = combo(options, "Ausübungsart", "Nicht angegeben", "Europäisch", "Amerikanisch", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
                         "Bermudan"); //$NON-NLS-1$
+        issuer = text(options, "Emittent"); //$NON-NLS-1$
+        strike.addModifyListener(event -> updateKnockOutValue());
         SelectionAdapter listener = new SelectionAdapter()
         {
             @Override
@@ -146,6 +148,7 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         firstNoticeDate.setText(value(property("firstNoticeDate"))); //$NON-NLS-1$
         lastTradingDate.setText(value(property("lastTradingDate"))); //$NON-NLS-1$
         strike.setText(value(property("strike"))); //$NON-NLS-1$
+        issuer.setText(value(property("issuer"))); //$NON-NLS-1$
         select(putCall, property("putCall"), new String[] { "", "CALL", "PUT" }); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
         select(exerciseStyle, property("exerciseStyle"),
                         new String[] { "", "EUROPEAN", "AMERICAN", "BERMUDAN" }); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
@@ -224,6 +227,12 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         }
     }
 
+    private void updateKnockOutValue()
+    {
+        if (knockOutLevel != null && knockOutCertificate.getSelection())
+            knockOutLevel.initialize(defaultDate(), decimalValue(strike.getText()));
+    }
+
     private BigDecimal decimalValue(String value)
     {
         if (value == null || value.isBlank())
@@ -263,6 +272,7 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         set("lastTradingDate", lastTradingDate.getText()); //$NON-NLS-1$
         set("putCall", new String[] { "", "CALL", "PUT" }[putCall.getSelectionIndex()]); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
         set("strike", strike.getText()); //$NON-NLS-1$
+        set("issuer", issuer.getText()); //$NON-NLS-1$
         set("exerciseStyle", new String[] { "", "EUROPEAN", "AMERICAN", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                         "BERMUDAN" }[exerciseStyle.getSelectionIndex()]); //$NON-NLS-1$ //$NON-NLS-2$
         set("multiplierHistory", multiplier.serialize()); //$NON-NLS-1$
@@ -372,11 +382,17 @@ public class DerivativeSecurityPage implements AddonSecurityPage
 
         private void initialize(LocalDate date, BigDecimal value)
         {
-            if (value == null || table.getItemCount() > 0)
+            if (table.getItemCount() > 0)
+            {
+                TableItem first = table.getItem(0);
+                if (value != null && first.getText(1).isBlank())
+                    first.setText(1, value.stripTrailingZeros().toPlainString());
                 return;
+            }
 
             TableItem item = new TableItem(table, SWT.NONE);
-            item.setText(new String[] { date.toString(), value.stripTrailingZeros().toPlainString() });
+            item.setText(new String[] { date.toString(),
+                            value == null ? "" : value.stripTrailingZeros().toPlainString() }); //$NON-NLS-1$
         }
 
         private String serialize()
