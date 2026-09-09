@@ -33,10 +33,12 @@ public class DerivativeSecurityPage implements AddonSecurityPage
 {
     private static final String PREFIX = "derivatives-addon."; //$NON-NLS-1$
     private Security security;
+    private Client client;
     private TabFolder instrumentPages;
-    private Text underlying, contractSymbol, expirationDate, contractMonth, firstNoticeDate, strike;
+    private Text underlying, exchange, contractSymbol, expirationDate, underlyingCurrency, pricingCurrency;
+    private Text contractMonth, firstNoticeDate, lastTradingDate, strike;
     private Combo putCall, exerciseStyle;
-    private Button regularOption, knockOutCertificate;
+    private Button fxInstrument, regularOption, knockOutCertificate;
     private DatedValueEditor multiplier, delta, knockOutLevel;
 
     @Override
@@ -48,6 +50,7 @@ public class DerivativeSecurityPage implements AddonSecurityPage
     @Override
     public Control createControl(Composite parent, Client client, Security security)
     {
+        this.client = client;
         this.security = security;
         TabFolder root = new TabFolder(parent, SWT.NONE);
         createMasterDataPage(page(root, "Stammdaten")); //$NON-NLS-1$
@@ -73,8 +76,21 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         GridDataFactory.fillDefaults().grab(true, false).applyTo(common);
         GridLayoutFactory.fillDefaults().numColumns(2).margins(10, 10).spacing(10, 8).applyTo(common);
         underlying = text(common, "Underlying"); //$NON-NLS-1$
+        exchange = text(common, "Exchange"); //$NON-NLS-1$
         contractSymbol = text(common, "Kontrakt- / Handelssymbol"); //$NON-NLS-1$
         expirationDate = text(common, "Fälligkeit (JJJJ-MM-TT)"); //$NON-NLS-1$
+        new Label(common, SWT.NONE).setText("FX Instrument"); //$NON-NLS-1$
+        fxInstrument = new Button(common, SWT.CHECK);
+        underlyingCurrency = text(common, "Underlying Currency"); //$NON-NLS-1$
+        pricingCurrency = text(common, "Pricing Currency"); //$NON-NLS-1$
+        fxInstrument.addSelectionListener(new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent event)
+            {
+                updateFxState();
+            }
+        });
 
         instrumentPages = new TabFolder(parent, SWT.NONE);
         GridDataFactory.fillDefaults().grab(true, true).applyTo(instrumentPages);
@@ -82,6 +98,7 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         GridLayoutFactory.fillDefaults().numColumns(2).margins(12, 12).spacing(10, 8).applyTo(futures);
         contractMonth = text(futures, "Kontraktmonat"); //$NON-NLS-1$
         firstNoticeDate = text(futures, "First Notice Day (JJJJ-MM-TT)"); //$NON-NLS-1$
+        lastTradingDate = text(futures, "Last Trading Date (JJJJ-MM-TT)"); //$NON-NLS-1$
 
         Composite options = page(instrumentPages, "Optionen"); //$NON-NLS-1$
         GridLayoutFactory.fillDefaults().numColumns(2).margins(12, 12).spacing(10, 8).applyTo(options);
@@ -94,7 +111,8 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         knockOutCertificate.setText("K.O.-Zertifikat"); //$NON-NLS-1$
         putCall = combo(options, "Put / Call", "Nicht angegeben", "Call", "Put"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
         strike = text(options, "Basispreis"); //$NON-NLS-1$
-        exerciseStyle = combo(options, "Ausübungsart", "Nicht angegeben", "Europäisch", "Amerikanisch"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+        exerciseStyle = combo(options, "Ausübungsart", "Nicht angegeben", "Europäisch", "Amerikanisch", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+                        "Bermudan"); //$NON-NLS-1$
         SelectionAdapter listener = new SelectionAdapter()
         {
             @Override
@@ -118,13 +136,19 @@ public class DerivativeSecurityPage implements AddonSecurityPage
     private void loadValues()
     {
         underlying.setText(value(property("underlying"))); //$NON-NLS-1$
+        exchange.setText(value(property("exchange"))); //$NON-NLS-1$
         contractSymbol.setText(value(property("contractSymbol"))); //$NON-NLS-1$
         expirationDate.setText(value(property("expirationDate"))); //$NON-NLS-1$
+        fxInstrument.setSelection(Boolean.parseBoolean(value(property("fxInstrument")))); //$NON-NLS-1$
+        underlyingCurrency.setText(value(property("underlyingCurrency"))); //$NON-NLS-1$
+        pricingCurrency.setText(value(property("pricingCurrency"))); //$NON-NLS-1$
         contractMonth.setText(value(property("contractMonth"))); //$NON-NLS-1$
         firstNoticeDate.setText(value(property("firstNoticeDate"))); //$NON-NLS-1$
+        lastTradingDate.setText(value(property("lastTradingDate"))); //$NON-NLS-1$
         strike.setText(value(property("strike"))); //$NON-NLS-1$
         select(putCall, property("putCall"), new String[] { "", "CALL", "PUT" }); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        select(exerciseStyle, property("exerciseStyle"), new String[] { "", "EUROPEAN", "AMERICAN" }); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        select(exerciseStyle, property("exerciseStyle"),
+                        new String[] { "", "EUROPEAN", "AMERICAN", "BERMUDAN" }); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
         String type = value(property("instrumentType")); //$NON-NLS-1$
         instrumentPages.setSelection("FUTURE".equalsIgnoreCase(type) ? 0 : 1); //$NON-NLS-1$
         boolean ko = "KNOCK_OUT_CERTIFICATE".equalsIgnoreCase(type); //$NON-NLS-1$
@@ -132,11 +156,21 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         knockOutCertificate.setSelection(ko);
         String history = property("multiplierHistory"); //$NON-NLS-1$
         if (history == null)
-            history = LocalDate.now() + "=" + AddonMultiplier.get(security).toPlainString(); //$NON-NLS-1$
-        multiplier.load(history);
-        delta.load(property("deltaHistory")); //$NON-NLS-1$
-        knockOutLevel.load(property("knockOutLevelHistory")); //$NON-NLS-1$
+            history = defaultDate() + "=" + AddonMultiplier.get(security).toPlainString(); //$NON-NLS-1$
+        LocalDate defaultDate = defaultDate();
+        multiplier.load(history, defaultDate);
+        delta.load(property("deltaHistory"), defaultDate); //$NON-NLS-1$
+        knockOutLevel.load(property("knockOutLevelHistory"), defaultDate); //$NON-NLS-1$
+        updateFxState();
         updateKnockOutState();
+    }
+
+    private LocalDate defaultDate()
+    {
+        return client.getPortfolios().stream().flatMap(portfolio -> portfolio.getTransactions().stream())
+                        .filter(transaction -> security.equals(transaction.getSecurity()))
+                        .map(transaction -> transaction.getDateTime().toLocalDate()).min(LocalDate::compareTo)
+                        .orElse(LocalDate.now());
     }
 
     private Text text(Composite parent, String label)
@@ -186,6 +220,13 @@ public class DerivativeSecurityPage implements AddonSecurityPage
             knockOutLevel.setEnabled(knockOutCertificate.getSelection());
     }
 
+    private void updateFxState()
+    {
+        boolean enabled = fxInstrument.getSelection();
+        underlyingCurrency.setEnabled(enabled);
+        pricingCurrency.setEnabled(enabled);
+    }
+
     @Override
     public void applyChanges()
     {
@@ -193,13 +234,19 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         set("instrumentType", future ? "FUTURE" //$NON-NLS-1$ //$NON-NLS-2$
                         : knockOutCertificate.getSelection() ? "KNOCK_OUT_CERTIFICATE" : "OPTION"); //$NON-NLS-1$ //$NON-NLS-2$
         set("underlying", underlying.getText()); //$NON-NLS-1$
+        set("exchange", exchange.getText()); //$NON-NLS-1$
         set("contractSymbol", contractSymbol.getText()); //$NON-NLS-1$
         set("expirationDate", expirationDate.getText()); //$NON-NLS-1$
+        set("fxInstrument", Boolean.toString(fxInstrument.getSelection())); //$NON-NLS-1$
+        set("underlyingCurrency", fxInstrument.getSelection() ? underlyingCurrency.getText() : null); //$NON-NLS-1$
+        set("pricingCurrency", fxInstrument.getSelection() ? pricingCurrency.getText() : null); //$NON-NLS-1$
         set("contractMonth", contractMonth.getText()); //$NON-NLS-1$
         set("firstNoticeDate", firstNoticeDate.getText()); //$NON-NLS-1$
+        set("lastTradingDate", lastTradingDate.getText()); //$NON-NLS-1$
         set("putCall", new String[] { "", "CALL", "PUT" }[putCall.getSelectionIndex()]); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
         set("strike", strike.getText()); //$NON-NLS-1$
-        set("exerciseStyle", new String[] { "", "EUROPEAN", "AMERICAN" }[exerciseStyle.getSelectionIndex()]); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+        set("exerciseStyle", new String[] { "", "EUROPEAN", "AMERICAN", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                        "BERMUDAN" }[exerciseStyle.getSelectionIndex()]); //$NON-NLS-1$ //$NON-NLS-2$
         set("multiplierHistory", multiplier.serialize()); //$NON-NLS-1$
         set("deltaHistory", delta.serialize()); //$NON-NLS-1$
         set("knockOutLevelHistory", knockOutCertificate.getSelection() ? knockOutLevel.serialize() : null); //$NON-NLS-1$
@@ -211,6 +258,7 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         private final Table table;
         private final Button add, remove;
         private final BigDecimal defaultValue;
+        private LocalDate defaultDate;
 
         private DatedValueEditor(Composite parent, String title, BigDecimal defaultValue)
         {
@@ -235,7 +283,7 @@ public class DerivativeSecurityPage implements AddonSecurityPage
                 public void widgetSelected(SelectionEvent event)
                 {
                     TableItem item = new TableItem(table, SWT.NONE);
-                    item.setText(new String[] { LocalDate.now().toString(),
+                    item.setText(new String[] { defaultDate.toString(),
                                     DatedValueEditor.this.defaultValue == null ? "" : DatedValueEditor.this.defaultValue.toPlainString() }); //$NON-NLS-1$
                     edit(item, 0);
                 }
@@ -291,11 +339,12 @@ public class DerivativeSecurityPage implements AddonSecurityPage
             });
         }
 
-        private void load(String encoded)
+        private void load(String encoded, LocalDate defaultDate)
         {
+            this.defaultDate = defaultDate;
             List<DatedValueSeries.Entry> entries = DatedValueSeries.parse(encoded);
             if (entries.isEmpty() && defaultValue != null)
-                entries = List.of(new DatedValueSeries.Entry(LocalDate.now(), defaultValue));
+                entries = List.of(new DatedValueSeries.Entry(defaultDate, defaultValue));
             for (DatedValueSeries.Entry entry : entries)
             {
                 TableItem item = new TableItem(table, SWT.NONE);
