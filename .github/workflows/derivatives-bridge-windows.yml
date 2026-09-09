@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/derivatives-addon-standalone
+      - agent/derivatives-addon-security-tab
     paths:
       - 'name.abuchen.portfolio.ui/**'
       - 'portfolio-app/**'
