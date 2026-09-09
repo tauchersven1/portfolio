@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin>
+ <extension point="name.abuchen.portfolio.ui.navigation">
+  <contributor class="de.venari.portfolio.derivatives.DerivativesNavigationExtension"/>
+ </extension>
+</plugin>

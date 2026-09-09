@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<site>
+ <feature id="de.venari.portfolio.derivatives.feature">
+  <category name="de.venari.portfolio.derivatives"/>
+ </feature>
+ <category-def name="de.venari.portfolio.derivatives"
+               label="Portfolio Performance Derivatives Add-on"/>
+</site>
