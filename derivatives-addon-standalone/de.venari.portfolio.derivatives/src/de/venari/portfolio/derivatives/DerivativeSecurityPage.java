@@ -1,14 +1,27 @@
 package de.venari.portfolio.derivatives;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.custom.TableEditor;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.TabFolder;
+import org.eclipse.swt.widgets.TabItem;
+import org.eclipse.swt.widgets.Table;
+import org.eclipse.swt.widgets.TableColumn;
+import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
 
 import name.abuchen.portfolio.model.Client;
@@ -19,14 +32,12 @@ import name.abuchen.portfolio.ui.AddonSecurityPage;
 public class DerivativeSecurityPage implements AddonSecurityPage
 {
     private static final String PREFIX = "derivatives-addon."; //$NON-NLS-1$
-
     private Security security;
-    private Combo instrumentType;
-    private Combo putCall;
-    private Text underlying;
-    private Text contractSymbol;
-    private Text expirationDate;
-    private Text multiplier;
+    private TabFolder instrumentPages;
+    private Text underlying, contractSymbol, expirationDate, contractMonth, firstNoticeDate, strike;
+    private Combo putCall, exerciseStyle;
+    private Button regularOption, knockOutCertificate;
+    private DatedValueEditor multiplier, delta, knockOutLevel;
 
     @Override
     public String getTitle()
@@ -38,51 +49,119 @@ public class DerivativeSecurityPage implements AddonSecurityPage
     public Control createControl(Composite parent, Client client, Security security)
     {
         this.security = security;
+        TabFolder root = new TabFolder(parent, SWT.NONE);
+        createMasterDataPage(page(root, "Stammdaten")); //$NON-NLS-1$
+        createValuesPage(page(root, "Multiplier/Delta")); //$NON-NLS-1$
+        loadValues();
+        return root;
+    }
 
-        Composite body = new Composite(parent, SWT.NONE);
-        GridLayoutFactory.fillDefaults().numColumns(2).margins(12, 12).spacing(10, 8).applyTo(body);
-
-        instrumentType = combo(body, "Instrumententyp", "Kein Derivat", "Option", "Future", "K.O.-Zertifikat"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
-        putCall = combo(body, "Put / Call", "Nicht angegeben", "Call", "Put"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-        underlying = text(body, "Underlying"); //$NON-NLS-1$
-        contractSymbol = text(body, "Kontrakt- / Handelssymbol"); //$NON-NLS-1$
-        expirationDate = text(body, "Fälligkeit (JJJJ-MM-TT)"); //$NON-NLS-1$
-        multiplier = text(body, "Multiplikator"); //$NON-NLS-1$
-
-        select(instrumentType, property("instrumentType"), new String[] { "", "OPTION", "FUTURE", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-                        "KNOCK_OUT_CERTIFICATE" }); //$NON-NLS-1$
-        select(putCall, property("putCall"), new String[] { "", "CALL", "PUT" }); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-        underlying.setText(value(property("underlying"))); //$NON-NLS-1$
-        contractSymbol.setText(value(property("contractSymbol"))); //$NON-NLS-1$
-        expirationDate.setText(value(property("expirationDate"))); //$NON-NLS-1$
-        multiplier.setText(AddonMultiplier.get(security).stripTrailingZeros().toPlainString());
-
+    private Composite page(TabFolder folder, String title)
+    {
+        Composite body = new Composite(folder, SWT.NONE);
+        TabItem item = new TabItem(folder, SWT.NONE);
+        item.setText(title);
+        item.setControl(body);
         return body;
     }
 
-    private Combo combo(Composite parent, String label, String... values)
+    private void createMasterDataPage(Composite parent)
     {
-        new Label(parent, SWT.NONE).setText(label);
-        Combo combo = new Combo(parent, SWT.READ_ONLY);
-        combo.setItems(values);
-        combo.select(0);
-        GridDataFactory.fillDefaults().grab(true, false).hint(260, SWT.DEFAULT).applyTo(combo);
-        return combo;
+        GridLayoutFactory.fillDefaults().margins(12, 12).spacing(8, 10).applyTo(parent);
+        Group common = new Group(parent, SWT.NONE);
+        common.setText("Gemeinsame Stammdaten"); //$NON-NLS-1$
+        GridDataFactory.fillDefaults().grab(true, false).applyTo(common);
+        GridLayoutFactory.fillDefaults().numColumns(2).margins(10, 10).spacing(10, 8).applyTo(common);
+        underlying = text(common, "Underlying"); //$NON-NLS-1$
+        contractSymbol = text(common, "Kontrakt- / Handelssymbol"); //$NON-NLS-1$
+        expirationDate = text(common, "Fälligkeit (JJJJ-MM-TT)"); //$NON-NLS-1$
+
+        instrumentPages = new TabFolder(parent, SWT.NONE);
+        GridDataFactory.fillDefaults().grab(true, true).applyTo(instrumentPages);
+        Composite futures = page(instrumentPages, "Futures"); //$NON-NLS-1$
+        GridLayoutFactory.fillDefaults().numColumns(2).margins(12, 12).spacing(10, 8).applyTo(futures);
+        contractMonth = text(futures, "Kontraktmonat"); //$NON-NLS-1$
+        firstNoticeDate = text(futures, "First Notice Day (JJJJ-MM-TT)"); //$NON-NLS-1$
+
+        Composite options = page(instrumentPages, "Optionen"); //$NON-NLS-1$
+        GridLayoutFactory.fillDefaults().numColumns(2).margins(12, 12).spacing(10, 8).applyTo(options);
+        new Label(options, SWT.NONE).setText("Produkttyp"); //$NON-NLS-1$
+        Composite kinds = new Composite(options, SWT.NONE);
+        GridLayoutFactory.fillDefaults().numColumns(2).applyTo(kinds);
+        regularOption = new Button(kinds, SWT.RADIO);
+        regularOption.setText("Option"); //$NON-NLS-1$
+        knockOutCertificate = new Button(kinds, SWT.RADIO);
+        knockOutCertificate.setText("K.O.-Zertifikat"); //$NON-NLS-1$
+        putCall = combo(options, "Put / Call", "Nicht angegeben", "Call", "Put"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+        strike = text(options, "Basispreis"); //$NON-NLS-1$
+        exerciseStyle = combo(options, "Ausübungsart", "Nicht angegeben", "Europäisch", "Amerikanisch"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+        SelectionAdapter listener = new SelectionAdapter()
+        {
+            @Override
+            public void widgetSelected(SelectionEvent event)
+            {
+                updateKnockOutState();
+            }
+        };
+        regularOption.addSelectionListener(listener);
+        knockOutCertificate.addSelectionListener(listener);
+    }
+
+    private void createValuesPage(Composite parent)
+    {
+        GridLayoutFactory.fillDefaults().numColumns(3).margins(12, 12).spacing(12, 8).applyTo(parent);
+        multiplier = new DatedValueEditor(parent, "Multiplier", BigDecimal.ONE); //$NON-NLS-1$
+        delta = new DatedValueEditor(parent, "Delta", BigDecimal.ONE); //$NON-NLS-1$
+        knockOutLevel = new DatedValueEditor(parent, "K.O. Level", null); //$NON-NLS-1$
+    }
+
+    private void loadValues()
+    {
+        underlying.setText(value(property("underlying"))); //$NON-NLS-1$
+        contractSymbol.setText(value(property("contractSymbol"))); //$NON-NLS-1$
+        expirationDate.setText(value(property("expirationDate"))); //$NON-NLS-1$
+        contractMonth.setText(value(property("contractMonth"))); //$NON-NLS-1$
+        firstNoticeDate.setText(value(property("firstNoticeDate"))); //$NON-NLS-1$
+        strike.setText(value(property("strike"))); //$NON-NLS-1$
+        select(putCall, property("putCall"), new String[] { "", "CALL", "PUT" }); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        select(exerciseStyle, property("exerciseStyle"), new String[] { "", "EUROPEAN", "AMERICAN" }); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        String type = value(property("instrumentType")); //$NON-NLS-1$
+        instrumentPages.setSelection("FUTURE".equalsIgnoreCase(type) ? 0 : 1); //$NON-NLS-1$
+        boolean ko = "KNOCK_OUT_CERTIFICATE".equalsIgnoreCase(type); //$NON-NLS-1$
+        regularOption.setSelection(!ko);
+        knockOutCertificate.setSelection(ko);
+        String history = property("multiplierHistory"); //$NON-NLS-1$
+        if (history == null)
+            history = LocalDate.now() + "=" + AddonMultiplier.get(security).toPlainString(); //$NON-NLS-1$
+        multiplier.load(history);
+        delta.load(property("deltaHistory")); //$NON-NLS-1$
+        knockOutLevel.load(property("knockOutLevelHistory")); //$NON-NLS-1$
+        updateKnockOutState();
     }
 
     private Text text(Composite parent, String label)
     {
         new Label(parent, SWT.NONE).setText(label);
-        Text text = new Text(parent, SWT.BORDER);
-        GridDataFactory.fillDefaults().grab(true, false).hint(260, SWT.DEFAULT).applyTo(text);
-        return text;
+        Text field = new Text(parent, SWT.BORDER);
+        GridDataFactory.fillDefaults().grab(true, false).hint(260, SWT.DEFAULT).applyTo(field);
+        return field;
     }
 
-    private void select(Combo combo, String current, String[] storedValues)
+    private Combo combo(Composite parent, String label, String... items)
     {
-        for (int index = 0; index < storedValues.length; index++)
-            if (storedValues[index].equalsIgnoreCase(value(current)))
-                combo.select(index);
+        new Label(parent, SWT.NONE).setText(label);
+        Combo field = new Combo(parent, SWT.READ_ONLY);
+        field.setItems(items);
+        field.select(0);
+        GridDataFactory.fillDefaults().grab(true, false).hint(260, SWT.DEFAULT).applyTo(field);
+        return field;
+    }
+
+    private void select(Combo combo, String current, String[] values)
+    {
+        for (int ii = 0; ii < values.length; ii++)
+            if (values[ii].equalsIgnoreCase(value(current)))
+                combo.select(ii);
     }
 
     private String property(String name)
@@ -97,30 +176,163 @@ public class DerivativeSecurityPage implements AddonSecurityPage
 
     private void set(String name, String value)
     {
-        String normalized = value == null || value.isBlank() ? null : value.trim();
-        security.setPropertyValue(SecurityProperty.Type.FEED, PREFIX + name, normalized);
+        security.setPropertyValue(SecurityProperty.Type.FEED, PREFIX + name,
+                        value == null || value.isBlank() ? null : value.trim());
+    }
+
+    private void updateKnockOutState()
+    {
+        if (knockOutLevel != null)
+            knockOutLevel.setEnabled(knockOutCertificate.getSelection());
     }
 
     @Override
     public void applyChanges()
     {
-        String[] types = { "", "OPTION", "FUTURE", "KNOCK_OUT_CERTIFICATE" }; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-        String[] directions = { "", "CALL", "PUT" }; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        set("instrumentType", types[instrumentType.getSelectionIndex()]); //$NON-NLS-1$
-        set("putCall", directions[putCall.getSelectionIndex()]); //$NON-NLS-1$
+        boolean future = instrumentPages.getSelectionIndex() == 0;
+        set("instrumentType", future ? "FUTURE" //$NON-NLS-1$ //$NON-NLS-2$
+                        : knockOutCertificate.getSelection() ? "KNOCK_OUT_CERTIFICATE" : "OPTION"); //$NON-NLS-1$ //$NON-NLS-2$
         set("underlying", underlying.getText()); //$NON-NLS-1$
         set("contractSymbol", contractSymbol.getText()); //$NON-NLS-1$
         set("expirationDate", expirationDate.getText()); //$NON-NLS-1$
+        set("contractMonth", contractMonth.getText()); //$NON-NLS-1$
+        set("firstNoticeDate", firstNoticeDate.getText()); //$NON-NLS-1$
+        set("putCall", new String[] { "", "CALL", "PUT" }[putCall.getSelectionIndex()]); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+        set("strike", strike.getText()); //$NON-NLS-1$
+        set("exerciseStyle", new String[] { "", "EUROPEAN", "AMERICAN" }[exerciseStyle.getSelectionIndex()]); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+        set("multiplierHistory", multiplier.serialize()); //$NON-NLS-1$
+        set("deltaHistory", delta.serialize()); //$NON-NLS-1$
+        set("knockOutLevelHistory", knockOutCertificate.getSelection() ? knockOutLevel.serialize() : null); //$NON-NLS-1$
+        AddonMultiplier.set(security, multiplier.effectiveValue(LocalDate.now(), BigDecimal.ONE));
+    }
 
-        try
+    private static final class DatedValueEditor extends Composite
+    {
+        private final Table table;
+        private final Button add, remove;
+        private final BigDecimal defaultValue;
+
+        private DatedValueEditor(Composite parent, String title, BigDecimal defaultValue)
         {
-            BigDecimal value = new BigDecimal(multiplier.getText().trim());
-            if (value.signum() > 0)
-                AddonMultiplier.set(security, value);
+            super(parent, SWT.NONE);
+            this.defaultValue = defaultValue;
+            GridDataFactory.fillDefaults().grab(true, true).applyTo(this);
+            GridLayoutFactory.fillDefaults().numColumns(2).applyTo(this);
+            Label heading = new Label(this, SWT.NONE);
+            heading.setText(title);
+            GridDataFactory.fillDefaults().span(2, 1).applyTo(heading);
+            table = new Table(this, SWT.BORDER | SWT.FULL_SELECTION | SWT.SINGLE);
+            table.setHeaderVisible(true);
+            table.setLinesVisible(true);
+            GridDataFactory.fillDefaults().grab(true, true).span(2, 1).hint(260, 240).applyTo(table);
+            column("Gültig ab", 120); //$NON-NLS-1$
+            column("Wert", 120); //$NON-NLS-1$
+            add = new Button(this, SWT.PUSH);
+            add.setText("Hinzufügen"); //$NON-NLS-1$
+            add.addSelectionListener(new SelectionAdapter()
+            {
+                @Override
+                public void widgetSelected(SelectionEvent event)
+                {
+                    TableItem item = new TableItem(table, SWT.NONE);
+                    item.setText(new String[] { LocalDate.now().toString(),
+                                    DatedValueEditor.this.defaultValue == null ? "" : DatedValueEditor.this.defaultValue.toPlainString() }); //$NON-NLS-1$
+                    edit(item, 0);
+                }
+            });
+            remove = new Button(this, SWT.PUSH);
+            remove.setText("Entfernen"); //$NON-NLS-1$
+            remove.addSelectionListener(new SelectionAdapter()
+            {
+                @Override
+                public void widgetSelected(SelectionEvent event)
+                {
+                    if (table.getSelectionIndex() >= 0)
+                        table.remove(table.getSelectionIndex());
+                }
+            });
+            table.addListener(SWT.MouseDoubleClick, event -> {
+                TableItem item = table.getItem(new org.eclipse.swt.graphics.Point(event.x, event.y));
+                if (item != null)
+                    edit(item, event.x < table.getColumn(0).getWidth() ? 0 : 1);
+            });
         }
-        catch (NumberFormatException ignore)
+
+        private void column(String title, int width)
         {
-            // Keep the previously stored multiplier for invalid input.
+            TableColumn column = new TableColumn(table, SWT.NONE);
+            column.setText(title);
+            column.setWidth(width);
+        }
+
+        private void edit(TableItem item, int column)
+        {
+            TableEditor editor = new TableEditor(table);
+            Text input = new Text(table, SWT.BORDER);
+            input.setText(item.getText(column));
+            input.selectAll();
+            input.setFocus();
+            editor.grabHorizontal = true;
+            editor.setEditor(input, item, column);
+            input.addListener(SWT.FocusOut, e -> {
+                item.setText(column, input.getText().trim());
+                input.dispose();
+                editor.dispose();
+            });
+            input.addListener(SWT.Traverse, e -> {
+                if (e.detail == SWT.TRAVERSE_RETURN)
+                    table.setFocus();
+                else if (e.detail == SWT.TRAVERSE_ESCAPE)
+                {
+                    input.dispose();
+                    editor.dispose();
+                    e.doit = false;
+                }
+            });
+        }
+
+        private void load(String encoded)
+        {
+            List<DatedValueSeries.Entry> entries = DatedValueSeries.parse(encoded);
+            if (entries.isEmpty() && defaultValue != null)
+                entries = List.of(new DatedValueSeries.Entry(LocalDate.now(), defaultValue));
+            for (DatedValueSeries.Entry entry : entries)
+            {
+                TableItem item = new TableItem(table, SWT.NONE);
+                item.setText(new String[] { entry.date().toString(), entry.value().toPlainString() });
+            }
+        }
+
+        private String serialize()
+        {
+            List<DatedValueSeries.Entry> entries = new ArrayList<>();
+            for (TableItem item : table.getItems())
+            {
+                try
+                {
+                    entries.add(new DatedValueSeries.Entry(LocalDate.parse(item.getText(0)),
+                                    new BigDecimal(item.getText(1).replace(',', '.'))));
+                }
+                catch (RuntimeException ignore)
+                {
+                    // Ignore incomplete rows.
+                }
+            }
+            return DatedValueSeries.serialize(entries);
+        }
+
+        private BigDecimal effectiveValue(LocalDate date, BigDecimal fallback)
+        {
+            return DatedValueSeries.valueAt(serialize(), date).orElse(fallback);
+        }
+
+        @Override
+        public void setEnabled(boolean enabled)
+        {
+            super.setEnabled(enabled);
+            table.setEnabled(enabled);
+            add.setEnabled(enabled);
+            remove.setEnabled(enabled);
         }
     }
 }
