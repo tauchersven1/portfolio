@@ -1,6 +1,8 @@
 package name.abuchen.portfolio.ui.wizards.security;
 
 import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 import jakarta.inject.Inject;
@@ -10,6 +12,9 @@ import org.eclipse.core.databinding.beans.typed.BeanProperties;
 import org.eclipse.core.databinding.observable.value.IObservableValue;
 import org.eclipse.core.databinding.validation.ValidationStatus;
 import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IConfigurationElement;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.e4.core.services.events.IEventBroker;
 import org.eclipse.jface.databinding.swt.typed.WidgetProperties;
 import org.eclipse.jface.dialogs.Dialog;
@@ -39,6 +44,7 @@ import name.abuchen.portfolio.events.SecurityChangeEvent;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.ui.Images;
+import name.abuchen.portfolio.ui.AddonSecurityPage;
 import name.abuchen.portfolio.ui.Messages;
 import name.abuchen.portfolio.ui.PortfolioPlugin;
 import name.abuchen.portfolio.ui.util.BindingHelper;
@@ -56,6 +62,7 @@ public class EditSecurityDialog extends Dialog
     private final EditSecurityModel model;
     private final EditSecurityCache cache;
     private final BindingHelper bindings;
+    private final List<AddonSecurityPage> addonPages = new ArrayList<>();
 
     private boolean showQuoteConfigurationInitially = false;
 
@@ -207,15 +214,53 @@ public class EditSecurityDialog extends Dialog
         });
 
         addPage(new SecurityMasterDataPage(model, bindings), Images.SECURITY.image());
+        addAddonPages();
         addPage(new AttributesPage(model, bindings), null);
         addPage(new SecurityTaxonomyPage(model, bindings), null);
         addPage(new HistoricalQuoteProviderPage(model, cache, bindings), null);
         addPage(new LatestQuoteProviderPage(model, cache, bindings), null);
 
-        tabFolder.setSelection(showQuoteConfigurationInitially ? 3 : 0);
+        tabFolder.setSelection(showQuoteConfigurationInitially ? 4 : 0);
 
         // selection event not fired for initial selection
         ((AbstractPage) tabFolder.getSelection().getData()).beforePage();
+    }
+
+    private void addAddonPages()
+    {
+        IConfigurationElement[] elements = Platform.getExtensionRegistry()
+                        .getConfigurationElementsFor(PortfolioPlugin.PLUGIN_ID, "securityPages"); //$NON-NLS-1$
+
+        for (IConfigurationElement element : elements)
+        {
+            if (!"page".equals(element.getName())) //$NON-NLS-1$
+                continue;
+
+            try
+            {
+                Object contribution = element.createExecutableExtension("class"); //$NON-NLS-1$
+                if (!(contribution instanceof AddonSecurityPage page))
+                    continue;
+
+                Control control = page.createControl(tabFolder, model.getClient(), model.getSecurity());
+                CTabItem item = new CTabItem(tabFolder, SWT.NONE);
+                item.setControl(control);
+                item.setText(page.getTitle());
+                item.setData(new AbstractPage()
+                {
+                    @Override
+                    public void createControl(Composite parent)
+                    {
+                        setControl(control);
+                    }
+                });
+                addonPages.add(page);
+            }
+            catch (CoreException | RuntimeException e)
+            {
+                PortfolioPlugin.log(e);
+            }
+        }
     }
 
     private void addPage(AbstractPage page, Image image)
@@ -254,6 +299,7 @@ public class EditSecurityDialog extends Dialog
         boolean quotesCanChange = feedChanged || onlineIdChanged || tickerChanged || feedURLChanged || currencyChanged;
 
         model.applyChanges();
+        addonPages.forEach(AddonSecurityPage::applyChanges);
 
         if (quotesCanChange)
             security.getEphemeralData().touchFeedConfigurationChanged();
