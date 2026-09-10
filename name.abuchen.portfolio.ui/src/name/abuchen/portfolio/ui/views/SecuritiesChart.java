@@ -391,6 +391,7 @@ public class SecuritiesChart
     private Color colorEMA7 = Colors.getColor(200, 107, 200); // #C86BC8
 
     private static final String PREF_KEY = "security-chart-details"; //$NON-NLS-1$
+    private static final String PREF_KEY_UNDO_MULTIPLIER_HISTORY = "security-chart-undo-multiplier-history."; //$NON-NLS-1$
 
     private static final int MAX_SECURITIES_BENCHMARK = 10;
 
@@ -710,8 +711,8 @@ public class SecuritiesChart
 
         label = new Label(composite, SWT.NONE);
         label.setText(MessageFormat.format(Messages.LabelToolTipInvestmentDetails, Values.Share.format(t.getShares()),
-                        Values.CalculatedQuote.format(
-                                        t.getGrossPricePerShare(converter.with(t.getSecurity().getCurrencyCode())))));
+                        Values.CalculatedQuote.format(t.getSecurity().getCurrencyCode(),
+                                        Math.round(getInvestmentPriceForChart(t) * Values.Quote.divider()))));
     }
 
     private void addDividendTooltip(Composite composite, AccountTransaction t)
@@ -882,6 +883,11 @@ public class SecuritiesChart
         subMenuChartSettings.add(addMenuAction(ChartDetails.SHOW_DATA_EXTREMES_LABEL));
         subMenuChartSettings.add(addMenuAction(ChartDetails.SHOW_DATA_DIVESTMENT_INVESTMENT_LABEL));
         subMenuChartSettings.add(addMenuAction(ChartDetails.SHOW_MISSING_TRADING_DAYS));
+        if (securities.length == 1)
+        {
+            subMenuChartSettings.add(new Separator());
+            subMenuChartSettings.add(createUndoMultiplierHistoryAction(securities[0]));
+        }
         subMenuChartSettings.add(new Separator());
         subMenuChartSettings.add(addMenuAction(ChartDetails.SHOW_PERCENTAGE_AXIS));
         subMenuChartSettings.add(addMenuAction(ChartDetails.SHOW_MAIN_HORIZONTAL_LINES));
@@ -894,6 +900,21 @@ public class SecuritiesChart
         subMenuChartMovingAverage.add(subMenuChartMovingAverageSMA);
         subMenuChartMovingAverage.add(subMenuChartMovingAverageEMA);
         manager.add(subMenuChartSettings);
+    }
+
+    private Action createUndoMultiplierHistoryAction(Security security)
+    {
+        String preferenceKey = PREF_KEY_UNDO_MULTIPLIER_HISTORY + security.getUUID();
+        Action action = new SimpleAction("Kurshistorie: Multiplikator-Workaround rückgängig", a -> { //$NON-NLS-1$
+            Client writableClient = ReadOnlyClient.unwrap(client);
+            if (writableClient.hasProperty(preferenceKey))
+                writableClient.removeProperty(preferenceKey);
+            else
+                writableClient.setProperty(preferenceKey, Boolean.TRUE.toString());
+            updateChart();
+        });
+        action.setChecked(ReadOnlyClient.unwrap(client).hasProperty(preferenceKey));
+        return action;
     }
 
     private Action addMenuAction(ChartDetails detail)
@@ -1082,7 +1103,7 @@ public class SecuritiesChart
                 double[] valuesRelativeNegative = new double[range.size];
                 double[] valuesZeroLine = new double[range.size];
                 Double firstQuote = null;
-                Double referenceQuote = (prices.get(range.start).getValue() / Values.Quote.divider());
+                Double referenceQuote = getHistoricalPriceForChart(security, prices.get(range.start));
 
                 // Disable SWT antialias for more than 1000 records due to SWT
                 // performance issue in Drawing
@@ -1116,12 +1137,12 @@ public class SecuritiesChart
                 for (int ii = 0; ii < range.size; ii++)
                 {
                     SecurityPrice p = prices.get(ii + range.start);
+                    double historicalPrice = getHistoricalPriceForChart(security, p);
                     dates[ii] = p.getDate();
-                    values[ii] = isSingleSecurityMode ? p.getValue() / Values.Quote.divider()
-                                    : ((p.getValue() / Values.Quote.divider() / referenceQuote) - 1);
+                    values[ii] = isSingleSecurityMode ? historicalPrice : ((historicalPrice / referenceQuote) - 1);
                     if (showAreaRelativeToFirstQuote)
                     {
-                        valuesRelative[ii] = (p.getValue() / Values.Quote.divider()) - firstQuote;
+                        valuesRelative[ii] = historicalPrice - firstQuote;
                         valuesZeroLine[ii] = 0;
                         if (valuesRelative[ii] >= 0)
                         {
@@ -1461,8 +1482,7 @@ public class SecuritiesChart
                 if (showLabels)
                 {
                     String label = Values.Share.format(t.getType().isPurchase() ? t.getShares() : -t.getShares());
-                    double value = t.getGrossPricePerShare(converter.with(t.getSecurity().getCurrencyCode()))
-                                    .getAmount() / Values.Quote.divider();
+                    double value = getInvestmentPriceForChart(t);
                     chart.addMarkerLine(t.getDateTime().toLocalDate(), color, label, value);
                 }
                 else
@@ -1474,10 +1494,7 @@ public class SecuritiesChart
             LocalDate[] dates = transactions.stream().map(PortfolioTransaction::getDateTime).map(d -> d.toLocalDate())
                             .toArray(size -> new LocalDate[size]);
 
-            double[] values = transactions.stream().mapToDouble(
-                            t -> t.getGrossPricePerShare(converter.with(t.getSecurity().getCurrencyCode())).getAmount()
-                                            / Values.Quote.divider())
-                            .toArray();
+            double[] values = transactions.stream().mapToDouble(this::getInvestmentPriceForChart).toArray();
 
             @SuppressWarnings("unchecked")
             ILineSeries<Integer> border = (ILineSeries<Integer>) chart.getSeriesSet().createSeries(SeriesType.LINE,
@@ -1550,6 +1567,25 @@ public class SecuritiesChart
                 });
             }
         }
+    }
+
+    private double getInvestmentPriceForChart(PortfolioTransaction transaction)
+    {
+        double grossPricePerShare = transaction
+                        .getGrossPricePerShare(converter.with(transaction.getSecurity().getCurrencyCode())).getAmount()
+                        / Values.Quote.divider();
+        return grossPricePerShare / SecurityMultiplier
+                        .valueAt(transaction.getSecurity(), transaction.getDateTime().toLocalDate()).doubleValue();
+    }
+
+    private double getHistoricalPriceForChart(Security security, SecurityPrice price)
+    {
+        double value = price.getValue() / Values.Quote.divider();
+        String preferenceKey = PREF_KEY_UNDO_MULTIPLIER_HISTORY + security.getUUID();
+        if (!ReadOnlyClient.unwrap(client).hasProperty(preferenceKey))
+            return value;
+
+        return value / SecurityMultiplier.valueAt(security, price.getDate()).doubleValue();
     }
 
     private void addDividendMarkerLines(ChartInterval chartInterval, Security security,
@@ -1695,29 +1731,29 @@ public class SecuritiesChart
     {
         Optional<SecurityPrice> max = security.getPricesIncludingLatest().stream() //
                         .filter(p -> chartInterval.contains(p.getDate())) //
-                        .max(Comparator.comparing(SecurityPrice::getValue));
+                        .max(Comparator.comparingDouble(p -> getHistoricalPriceForChart(security, p)));
 
         Optional<SecurityPrice> min = security.getPricesIncludingLatest().stream() //
                         .filter(p -> chartInterval.contains(p.getDate())) //
-                        .min(Comparator.comparing(SecurityPrice::getValue));
+                        .min(Comparator.comparingDouble(p -> getHistoricalPriceForChart(security, p)));
 
         max.ifPresent(high -> addExtremeMarker(high, PlotSymbolType.DIAMOND, //
-                        Messages.LabelChartDetailMarkerHigh, colorExtremeMarkerHigh, chartConfig));
+                        Messages.LabelChartDetailMarkerHigh, colorExtremeMarkerHigh, security, chartConfig));
         min.ifPresent(low -> addExtremeMarker(low, PlotSymbolType.DIAMOND, //
-                        Messages.LabelChartDetailMarkerLow, colorExtremeMarkerLow, chartConfig));
+                        Messages.LabelChartDetailMarkerLow, colorExtremeMarkerLow, security, chartConfig));
     }
 
     private void addExtremeMarker(SecurityPrice price, PlotSymbolType plotSymbolType, String seriesLabel, Color color,
-                    EnumSet<ChartDetails> chartConfig)
+                    Security security, EnumSet<ChartDetails> chartConfig)
     {
         LocalDate eventDate = price.getDate();
-        double value = price.getValue() / Values.Quote.divider();
+        double value = getHistoricalPriceForChart(security, price);
+        String valueFormat = Values.Quote.format(Math.round(value * Values.Quote.divider()));
 
         if (chartConfig.contains(ChartDetails.SHOW_MARKER_LINES))
         {
             if (chartConfig.contains(ChartDetails.SHOW_DATA_EXTREMES_LABEL))
             {
-                String valueFormat = Values.Quote.format(price.getValue());
                 chart.addMarkerLine(eventDate, color, valueFormat, value);
             }
             else
@@ -1725,7 +1761,6 @@ public class SecuritiesChart
         }
         else
         {
-            String valueFormat = Values.Quote.format(price.getValue());
             LocalDate zonedDate = eventDate;
 
             @SuppressWarnings("unchecked")
