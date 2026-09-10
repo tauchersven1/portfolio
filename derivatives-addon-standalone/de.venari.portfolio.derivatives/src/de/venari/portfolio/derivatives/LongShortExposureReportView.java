@@ -1,6 +1,5 @@
 package de.venari.portfolio.derivatives;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -17,6 +16,7 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Label;
 
+import name.abuchen.portfolio.model.DerivativeExposure;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.CurrencyConverterImpl;
@@ -112,8 +112,9 @@ public class LongShortExposureReportView implements AddonView
 
         if (security != null)
         {
-            BigDecimal multiplier = AddonMultiplier.get(security);
-            exposure = marketValue.multiplyAndRound(multiplier.doubleValue());
+            DerivativeExposure.Result result = DerivativeExposure.calculate(context.getClient(), asset,
+                            LocalDate.now());
+            exposure = result.net();
         }
 
         if (!exposure.isZero())
