@@ -37,9 +37,9 @@ public class DerivativeExposureTest
 
         DerivativeExposure.Result result = DerivativeExposure.calculate(client, position(option, 2), DATE);
 
-        assertThat(result.net(), is(Money.of(CurrencyUnit.EUR, 15000000)));
-        assertThat(result.gross(), is(Money.of(CurrencyUnit.EUR, 15000000)));
-        assertThat(result.notional(), is(Money.of(CurrencyUnit.EUR, 30000000)));
+        assertThat(result.net(), is(Money.of(CurrencyUnit.EUR, 150000)));
+        assertThat(result.gross(), is(Money.of(CurrencyUnit.EUR, 150000)));
+        assertThat(result.notional(), is(Money.of(CurrencyUnit.EUR, 300000)));
     }
 
     @Test
@@ -56,10 +56,10 @@ public class DerivativeExposureTest
         DerivativeExposure.Result longPut = DerivativeExposure.calculate(client, position(put, 2), DATE);
         DerivativeExposure.Result shortPut = DerivativeExposure.calculate(client, position(put, -2), DATE);
 
-        assertThat(longPut.net(), is(Money.of(CurrencyUnit.EUR, -15000000)));
-        assertThat(shortPut.net(), is(Money.of(CurrencyUnit.EUR, 15000000)));
-        assertThat(longPut.notional(), is(Money.of(CurrencyUnit.EUR, 30000000)));
-        assertThat(shortPut.notional(), is(Money.of(CurrencyUnit.EUR, -30000000)));
+        assertThat(longPut.net(), is(Money.of(CurrencyUnit.EUR, -150000)));
+        assertThat(shortPut.net(), is(Money.of(CurrencyUnit.EUR, 150000)));
+        assertThat(longPut.notional(), is(Money.of(CurrencyUnit.EUR, 300000)));
+        assertThat(shortPut.notional(), is(Money.of(CurrencyUnit.EUR, -300000)));
     }
 
     @Test
