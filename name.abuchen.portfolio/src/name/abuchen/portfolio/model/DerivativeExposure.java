@@ -16,8 +16,8 @@ public final class DerivativeExposure
 {
     public static final String PREFIX = "derivatives-addon."; //$NON-NLS-1$
 
-    public record Result(Money gross, Money net, BigDecimal multiplier, BigDecimal delta, BigDecimal leverage,
-                    BigDecimal knockOutLevel)
+    public record Result(Money gross, Money net, Money notional, BigDecimal multiplier, BigDecimal delta,
+                    BigDecimal leverage, BigDecimal knockOutLevel)
     {
     }
 
@@ -36,11 +36,24 @@ public final class DerivativeExposure
         BigDecimal delta = valueAt(security, "deltaHistory", date, BigDecimal.ONE); //$NON-NLS-1$
         BigDecimal knockOutLevel = valueAt(security, "knockOutLevelHistory", date, null); //$NON-NLS-1$
         BigDecimal leverage = null;
+        String instrumentType = property(security, "instrumentType"); //$NON-NLS-1$
         boolean put = "PUT".equalsIgnoreCase(property(security, "putCall")); //$NON-NLS-1$ //$NON-NLS-2$
         BigDecimal directionalDelta = put ? delta.abs().negate() : delta.abs();
-        BigDecimal factor = multiplier.multiply(directionalDelta, Values.MC);
+        BigDecimal notionalFactor = multiplier;
+        BigDecimal factor;
 
-        if ("KNOCK_OUT_CERTIFICATE".equalsIgnoreCase(property(security, "instrumentType"))) //$NON-NLS-1$ //$NON-NLS-2$
+        if ("OPTION".equalsIgnoreCase(instrumentType)) //$NON-NLS-1$
+        {
+            BigDecimal strike = decimalProperty(security, "strike", BigDecimal.ONE); //$NON-NLS-1$
+            notionalFactor = notionalFactor.multiply(strike, Values.MC);
+            factor = notionalFactor.multiply(directionalDelta, Values.MC);
+        }
+        else
+        {
+            factor = multiplier.multiply(directionalDelta, Values.MC);
+        }
+
+        if ("KNOCK_OUT_CERTIFICATE".equalsIgnoreCase(instrumentType)) //$NON-NLS-1$
         {
             leverage = calculateLeverage(client, security, knockOutLevel, date);
             factor = leverage != null ? put ? leverage.negate() : leverage : BigDecimal.ZERO;
@@ -48,7 +61,9 @@ public final class DerivativeExposure
 
         Money net = marketValue.multiplyAndRound(factor.doubleValue());
         Money gross = Money.of(net.getCurrencyCode(), Math.abs(net.getAmount()));
-        return new Result(gross, net, multiplier, delta, leverage, knockOutLevel);
+        Money notional = "KNOCK_OUT_CERTIFICATE".equalsIgnoreCase(instrumentType) ? null //$NON-NLS-1$
+                        : marketValue.multiplyAndRound(notionalFactor.doubleValue());
+        return new Result(gross, net, notional, multiplier, delta, leverage, knockOutLevel);
     }
 
     public static BigDecimal valueAt(Security security, String historyName, LocalDate date, BigDecimal defaultValue)
@@ -68,6 +83,21 @@ public final class DerivativeExposure
         if (security == null)
             return null;
         return security.getPropertyValue(SecurityProperty.Type.FEED, PREFIX + name).orElse(null);
+    }
+
+    private static BigDecimal decimalProperty(Security security, String name, BigDecimal defaultValue)
+    {
+        String value = property(security, name);
+        if (value == null || value.isBlank())
+            return defaultValue;
+        try
+        {
+            return new BigDecimal(value.trim().replace(',', '.'));
+        }
+        catch (NumberFormatException ignore)
+        {
+            return defaultValue;
+        }
     }
 
     private static BigDecimal calculateLeverage(Client client, Security certificate, BigDecimal knockOutLevel,
