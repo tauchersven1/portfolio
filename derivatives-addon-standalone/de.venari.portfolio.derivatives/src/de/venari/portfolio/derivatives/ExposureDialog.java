@@ -41,6 +41,7 @@ import org.eclipse.swt.widgets.TabFolder;
 import org.eclipse.swt.widgets.TabItem;
 
 import name.abuchen.portfolio.model.Client;
+import name.abuchen.portfolio.model.DerivativeExposure;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.CurrencyConverter;
@@ -258,8 +259,10 @@ public class ExposureDialog extends Dialog
             return;
 
         Money value = asset.getValuation();
-        BigDecimal multiplier = AddonMultiplier.get(security);
-        Money exposure = value.multiplyAndRound(multiplier.doubleValue());
+        DerivativeExposure.Result result = DerivativeExposure.calculate(client, asset, valuationDate);
+        BigDecimal multiplier = result.leverage() != null ? result.leverage()
+                        : result.multiplier().multiply(result.delta(), Values.MC);
+        Money exposure = result.net();
 
         LocalDate maturityDate = maturityDate(security);
         String maturity = maturityDate != null ? YearMonth.from(maturityDate).format(MONTH_FORMAT)
