@@ -906,8 +906,9 @@ public class StatementOfAssetsViewer
         addDerivativeValueColumn("derivative.delta", "Delta", result -> result.delta()); //$NON-NLS-1$ //$NON-NLS-2$
         addDerivativeValueColumn("derivative.knockOutLevel", "K.O. Level", result -> result.knockOutLevel()); //$NON-NLS-1$ //$NON-NLS-2$
         addDerivativeValueColumn("derivative.leverage", "Hebel", result -> result.leverage()); //$NON-NLS-1$ //$NON-NLS-2$
-        addDerivativeMoneyColumn("derivative.grossExposure", "Grossexposure", true); //$NON-NLS-1$ //$NON-NLS-2$
-        addDerivativeMoneyColumn("derivative.netExposure", "Netexposure", false); //$NON-NLS-1$ //$NON-NLS-2$
+        addDerivativeMoneyColumn("derivative.grossExposure", "Grossexposure", result -> result.gross()); //$NON-NLS-1$ //$NON-NLS-2$
+        addDerivativeMoneyColumn("derivative.netExposure", "Netexposure", result -> result.net()); //$NON-NLS-1$ //$NON-NLS-2$
+        addDerivativeMoneyColumn("derivative.notional", "Notional", result -> result.notional()); //$NON-NLS-1$ //$NON-NLS-2$
     }
 
     private void addDerivativeTextColumn(String id, String label, String property)
@@ -950,7 +951,8 @@ public class StatementOfAssetsViewer
         support.addColumn(column);
     }
 
-    private void addDerivativeMoneyColumn(String id, String label, boolean gross)
+    private void addDerivativeMoneyColumn(String id, String label,
+                    Function<DerivativeExposure.Result, Money> valueProvider)
     {
         Column column = new Column(id, label, SWT.RIGHT, 110);
         column.setGroupLabel("Derivate"); //$NON-NLS-1$
@@ -959,7 +961,7 @@ public class StatementOfAssetsViewer
             @Override
             public String getText(Object e)
             {
-                Money value = derivativeExposure((Element) e, gross);
+                Money value = derivativeMoney((Element) e, valueProvider);
                 return value != null ? Values.Money.format(value) : null;
             }
         });
@@ -967,16 +969,16 @@ public class StatementOfAssetsViewer
         support.addColumn(column);
     }
 
-    private Money derivativeExposure(Element element, boolean gross)
+    private Money derivativeMoney(Element element, Function<DerivativeExposure.Result, Money> valueProvider)
     {
         if (isDerivative(element))
         {
             DerivativeExposure.Result result = DerivativeExposure.calculate(client, element.getPosition(),
                             model.getDate());
-            return result == null ? null : gross ? result.gross() : result.net();
+            return result == null ? null : valueProvider.apply(result);
         }
 
-        List<Money> values = element.getChildren().map(child -> derivativeExposure(child, gross))
+        List<Money> values = element.getChildren().map(child -> derivativeMoney(child, valueProvider))
                         .filter(Objects::nonNull).toList();
         if (values.isEmpty())
             return null;
