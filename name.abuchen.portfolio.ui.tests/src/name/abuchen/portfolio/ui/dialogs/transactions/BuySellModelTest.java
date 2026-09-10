@@ -1,6 +1,7 @@
 package name.abuchen.portfolio.ui.dialogs.transactions;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.comparesEqualTo;
 import static org.hamcrest.Matchers.is;
 
 import java.math.BigDecimal;
@@ -153,11 +154,11 @@ public class BuySellModelTest
         model.setDate(LocalDate.of(2026, 2, 1));
         model.setShares(2L * Values.Share.factor());
         model.setQuote(BigDecimal.valueOf(5));
-        assertThat(model.getMultiplier(), is(BigDecimal.TEN));
+        assertThat(model.getMultiplier(), comparesEqualTo(BigDecimal.TEN));
         assertThat(model.getGrossValue(), is(100L * Values.Amount.factor()));
 
         model.setDate(LocalDate.of(2026, 7, 1));
-        assertThat(model.getMultiplier(), is(BigDecimal.valueOf(100)));
+        assertThat(model.getMultiplier(), comparesEqualTo(BigDecimal.valueOf(100)));
         assertThat(model.getGrossValue(), is(1000L * Values.Amount.factor()));
     }
 }
