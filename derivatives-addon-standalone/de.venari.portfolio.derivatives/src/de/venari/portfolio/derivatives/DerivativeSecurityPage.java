@@ -1,9 +1,16 @@
 package de.venari.portfolio.derivatives;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
@@ -32,10 +39,16 @@ import name.abuchen.portfolio.ui.AddonSecurityPage;
 public class DerivativeSecurityPage implements AddonSecurityPage
 {
     private static final String PREFIX = "derivatives-addon."; //$NON-NLS-1$
+    private static final Pattern US_OPTION = Pattern.compile("^([A-Z0-9]{1,8})(\\d{6})([CP])(\\d{8})$"); //$NON-NLS-1$
+    private static final Pattern EUREX_OPTION = Pattern.compile("^([CP])(.+?)(20\\d{6})(\\d+(?:[.,]\\d+)?)M$"); //$NON-NLS-1$
+    private static final Pattern FUTURE = Pattern.compile("^([A-Z0-9._-]+?)([FGHJKMNQUVXZ])(\\d{1,2})$"); //$NON-NLS-1$
+    private static final String FUTURE_MONTH_CODES = "FGHJKMNQUVXZ"; //$NON-NLS-1$
     private Security security;
     private Client client;
     private TabFolder instrumentPages;
-    private Text underlying, exchange, contractSymbol, expirationDate, underlyingCurrency, pricingCurrency;
+    private Text exchange, contractSymbol, expirationDate, underlyingCurrency, pricingCurrency;
+    private Combo underlying;
+    private final List<Security> underlyingSecurities = new ArrayList<>();
     private Text contractMonth, firstNoticeDate, lastTradingDate, strike, issuer;
     private Combo putCall, exerciseStyle;
     private Button fxInstrument, regularOption, knockOutCertificate;
@@ -75,7 +88,10 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         common.setText("Gemeinsame Stammdaten"); //$NON-NLS-1$
         GridDataFactory.fillDefaults().grab(true, false).applyTo(common);
         GridLayoutFactory.fillDefaults().numColumns(2).margins(10, 10).spacing(10, 8).applyTo(common);
-        underlying = text(common, "Underlying"); //$NON-NLS-1$
+        new Label(common, SWT.NONE).setText("Underlying"); //$NON-NLS-1$
+        underlying = new Combo(common, SWT.READ_ONLY);
+        GridDataFactory.fillDefaults().grab(true, false).hint(260, SWT.DEFAULT).applyTo(underlying);
+        populateUnderlyings();
         exchange = text(common, "Exchange"); //$NON-NLS-1$
         contractSymbol = text(common, "Kontrakt- / Handelssymbol"); //$NON-NLS-1$
         expirationDate = text(common, "Fälligkeit (JJJJ-MM-TT)"); //$NON-NLS-1$
@@ -137,7 +153,7 @@ public class DerivativeSecurityPage implements AddonSecurityPage
 
     private void loadValues()
     {
-        underlying.setText(value(property("underlying"))); //$NON-NLS-1$
+        selectUnderlying(value(property("underlying"))); //$NON-NLS-1$
         exchange.setText(value(property("exchange"))); //$NON-NLS-1$
         contractSymbol.setText(value(property("contractSymbol"))); //$NON-NLS-1$
         expirationDate.setText(value(property("expirationDate"))); //$NON-NLS-1$
@@ -166,6 +182,185 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         knockOutLevel.load(property("knockOutLevelHistory"), defaultDate); //$NON-NLS-1$
         updateFxState();
         updateKnockOutState();
+        autofillFromSymbol();
+    }
+
+    private void populateUnderlyings()
+    {
+        underlying.removeAll();
+        underlyingSecurities.clear();
+        underlying.add(""); //$NON-NLS-1$
+        client.getSecurities().stream().filter(candidate -> !candidate.equals(security))
+                        .sorted(Comparator.comparing(this::underlyingLabel, String.CASE_INSENSITIVE_ORDER))
+                        .forEach(candidate -> {
+                            underlyingSecurities.add(candidate);
+                            underlying.add(underlyingLabel(candidate));
+                        });
+        underlying.select(0);
+    }
+
+    private String underlyingLabel(Security candidate)
+    {
+        String ticker = value(candidate.getTickerSymbol());
+        return ticker.isBlank() ? candidate.getName() : candidate.getName() + " (" + ticker + ")"; //$NON-NLS-1$ //$NON-NLS-2$
+    }
+
+    private void selectUnderlying(String stored)
+    {
+        underlying.select(0);
+        for (int ii = 0; ii < underlyingSecurities.size(); ii++)
+        {
+            Security candidate = underlyingSecurities.get(ii);
+            if (stored.equalsIgnoreCase(value(candidate.getTickerSymbol())) || stored.equals(candidate.getUUID())
+                            || stored.equalsIgnoreCase(candidate.getName()))
+            {
+                underlying.select(ii + 1);
+                return;
+            }
+        }
+    }
+
+    private String selectedUnderlying()
+    {
+        int index = underlying.getSelectionIndex() - 1;
+        if (index < 0 || index >= underlyingSecurities.size())
+            return null;
+        Security selected = underlyingSecurities.get(index);
+        String ticker = value(selected.getTickerSymbol());
+        return ticker.isBlank() ? selected.getUUID() : ticker;
+    }
+
+    private void autofillFromSymbol()
+    {
+        String symbol = value(security.getTickerSymbol()).trim().toUpperCase(Locale.ROOT).replace(" ", ""); //$NON-NLS-1$ //$NON-NLS-2$
+        if (symbol.isBlank())
+            return;
+
+        Matcher us = US_OPTION.matcher(symbol);
+        if (us.matches())
+        {
+            LocalDate expiry = parseUsDate(us.group(2));
+            applyOptionAutofill(us.group(1), expiry, us.group(3), new BigDecimal(us.group(4)).movePointLeft(3));
+            return;
+        }
+
+        Matcher eurex = EUREX_OPTION.matcher(symbol);
+        if (eurex.matches())
+        {
+            LocalDate expiry = parseIsoCompactDate(eurex.group(3));
+            applyOptionAutofill(eurex.group(2), expiry, eurex.group(1),
+                            new BigDecimal(eurex.group(4).replace(',', '.')));
+            return;
+        }
+
+        Matcher future = FUTURE.matcher(symbol);
+        if (future.matches())
+            applyFutureAutofill(future.group(1), future.group(2).charAt(0), future.group(3));
+    }
+
+    private void applyOptionAutofill(String root, LocalDate expiry, String callPut, BigDecimal parsedStrike)
+    {
+        instrumentPages.setSelection(1);
+        regularOption.setSelection(true);
+        knockOutCertificate.setSelection(false);
+        autofillUnderlying(root);
+        autofill(contractSymbol, root);
+        autofill(expirationDate, expiry == null ? null : expiry.toString());
+        autofill(firstNoticeDate, expiry == null ? null : expiry.toString());
+        autofill(lastTradingDate, expiry == null ? null : expiry.toString());
+        autofill(strike, parsedStrike.stripTrailingZeros().toPlainString());
+        int selection = "C".equals(callPut) ? 1 : 2; //$NON-NLS-1$
+        String previous = putCall.getSelectionIndex() < 0 ? "" : putCall.getItem(putCall.getSelectionIndex()); //$NON-NLS-1$
+        if (!previous.equals(putCall.getItem(selection)) && !previous.equals(putCall.getItem(0)))
+            putCall.setForeground(putCall.getDisplay().getSystemColor(SWT.COLOR_RED));
+        putCall.select(selection);
+        updateKnockOutState();
+    }
+
+    private void applyFutureAutofill(String root, char monthCode, String yearCode)
+    {
+        int month = FUTURE_MONTH_CODES.indexOf(monthCode) + 1;
+        int year = parseFutureYear(yearCode);
+        if (month < 1 || year < 1)
+            return;
+        YearMonth contract = YearMonth.of(year, month);
+        instrumentPages.setSelection(0);
+        autofillUnderlying(root);
+        autofill(contractSymbol, root);
+        autofill(contractMonth, contract.toString());
+
+        LocalDate expiry = knownFutureExpiry(root, contract);
+        if (expiry != null)
+        {
+            autofill(expirationDate, expiry.toString());
+            autofill(firstNoticeDate, expiry.toString());
+            autofill(lastTradingDate, expiry.toString());
+        }
+    }
+
+    private LocalDate knownFutureExpiry(String root, YearMonth contract)
+    {
+        return switch (root)
+        {
+            case "ES", "MES", "NQ", "MNQ", "RTY", "M2K" -> contract.atDay(1) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
+                            .with(TemporalAdjusters.dayOfWeekInMonth(3, DayOfWeek.FRIDAY));
+            default -> null;
+        };
+    }
+
+    private int parseFutureYear(String value)
+    {
+        int parsed = Integer.parseInt(value);
+        if (value.length() == 2)
+            return 2000 + parsed;
+        int decade = (LocalDate.now().getYear() / 10) * 10;
+        int year = decade + parsed;
+        return year < LocalDate.now().getYear() - 2 ? year + 10 : year;
+    }
+
+    private LocalDate parseUsDate(String value)
+    {
+        return parseIsoCompactDate("20" + value); //$NON-NLS-1$
+    }
+
+    private LocalDate parseIsoCompactDate(String value)
+    {
+        try
+        {
+            return LocalDate.of(Integer.parseInt(value.substring(0, 4)), Integer.parseInt(value.substring(4, 6)),
+                            Integer.parseInt(value.substring(6, 8)));
+        }
+        catch (RuntimeException ignore)
+        {
+            return null;
+        }
+    }
+
+    private void autofillUnderlying(String ticker)
+    {
+        String previous = selectedUnderlying();
+        for (int ii = 0; ii < underlyingSecurities.size(); ii++)
+        {
+            Security candidate = underlyingSecurities.get(ii);
+            if (ticker.equalsIgnoreCase(value(candidate.getTickerSymbol())))
+            {
+                String replacement = value(candidate.getTickerSymbol());
+                if (previous != null && !previous.equalsIgnoreCase(replacement))
+                    underlying.setForeground(underlying.getDisplay().getSystemColor(SWT.COLOR_RED));
+                underlying.select(ii + 1);
+                return;
+            }
+        }
+    }
+
+    private void autofill(Text field, String replacement)
+    {
+        if (replacement == null || replacement.isBlank())
+            return;
+        String previous = field.getText().trim();
+        if (!previous.isBlank() && !previous.equalsIgnoreCase(replacement))
+            field.setForeground(field.getDisplay().getSystemColor(SWT.COLOR_RED));
+        field.setText(replacement);
     }
 
     private LocalDate defaultDate()
@@ -260,7 +455,7 @@ public class DerivativeSecurityPage implements AddonSecurityPage
         boolean future = instrumentPages.getSelectionIndex() == 0;
         set("instrumentType", future ? "FUTURE" //$NON-NLS-1$ //$NON-NLS-2$
                         : knockOutCertificate.getSelection() ? "KNOCK_OUT_CERTIFICATE" : "OPTION"); //$NON-NLS-1$ //$NON-NLS-2$
-        set("underlying", underlying.getText()); //$NON-NLS-1$
+        set("underlying", selectedUnderlying()); //$NON-NLS-1$
         set("exchange", exchange.getText()); //$NON-NLS-1$
         set("contractSymbol", contractSymbol.getText()); //$NON-NLS-1$
         set("expirationDate", expirationDate.getText()); //$NON-NLS-1$
