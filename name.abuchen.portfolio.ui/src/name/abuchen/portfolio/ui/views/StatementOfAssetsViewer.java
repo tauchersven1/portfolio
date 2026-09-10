@@ -63,6 +63,7 @@ import name.abuchen.portfolio.model.InvestmentVehicle;
 import name.abuchen.portfolio.model.Named;
 import name.abuchen.portfolio.model.Portfolio;
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.TaxesAndFees;
 import name.abuchen.portfolio.model.Taxonomy;
 import name.abuchen.portfolio.model.TransactionOwner;
@@ -515,7 +516,7 @@ public class StatementOfAssetsViewer
             public String getText(Object e)
             {
                 Element element = (Element) e;
-                return Values.Money.format(element.getValuation(), client.getBaseCurrency());
+                return Values.Money.format(marketValue(element), client.getBaseCurrency());
             }
 
             @Override
@@ -524,7 +525,8 @@ public class StatementOfAssetsViewer
                 return ((Element) e).isGroupByTaxonomy() || ((Element) e).isCategory() ? boldFont : null;
             }
         });
-        column.setSorter(ColumnViewerSorter.create(Element.class, "valuation").wrap(ElementComparator::new)); //$NON-NLS-1$
+        column.setSorter(ColumnViewerSorter.create(new ElementComparator(new AttributeComparator(
+                        e -> marketValue((Element) e)))));
         support.addColumn(column);
 
         column = new Column("6", Messages.ColumnShareInPercent, SWT.RIGHT, 80); //$NON-NLS-1$
@@ -964,6 +966,12 @@ public class StatementOfAssetsViewer
                 Money value = derivativeMoney((Element) e, valueProvider);
                 return value != null ? Values.Money.format(value) : null;
             }
+
+            @Override
+            public Font getFont(Object e)
+            {
+                return ((Element) e).isGroupByTaxonomy() || ((Element) e).isCategory() ? boldFont : null;
+            }
         });
         column.setVisible(false);
         support.addColumn(column);
@@ -971,11 +979,17 @@ public class StatementOfAssetsViewer
 
     private Money derivativeMoney(Element element, Function<DerivativeExposure.Result, Money> valueProvider)
     {
-        if (isDerivative(element))
+        if (element.isPosition())
         {
-            DerivativeExposure.Result result = DerivativeExposure.calculate(client, element.getPosition(),
-                            model.getDate());
-            return result == null ? null : valueProvider.apply(result);
+            if (isDerivative(element))
+            {
+                DerivativeExposure.Result result = DerivativeExposure.calculate(client, element.getPosition(),
+                                model.getDate());
+                Money value = result == null ? null : valueProvider.apply(result);
+                if (value != null)
+                    return value;
+            }
+            return marketValue(element);
         }
 
         List<Money> values = element.getChildren().map(child -> derivativeMoney(child, valueProvider))
@@ -984,6 +998,36 @@ public class StatementOfAssetsViewer
             return null;
         long amount = values.stream().mapToLong(Money::getAmount).sum();
         return Money.of(model.getCurrencyConverter().getTermCurrency(), amount);
+    }
+
+    private Money marketValue(Element element)
+    {
+        if (element.isPosition())
+        {
+            if (isFuture(element))
+            {
+                String currencyCode = model.getCurrencyConverter().getTermCurrency();
+                Interval interval = model.getGlobalInterval();
+                model.calculatePerformanceAndInjectIntoElements(currencyCode, interval);
+                LazySecurityPerformanceRecord record = element.getPerformance(currencyCode, interval);
+                if (record != null)
+                {
+                    Money currentContractValue = element.getValuation().multiplyAndRound(
+                                    SecurityMultiplier.valueAt(element.getSecurity(), model.getDate()).doubleValue());
+                    return currentContractValue.subtract(record.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED));
+                }
+            }
+            return element.getValuation();
+        }
+
+        return element.getChildren().map(this::marketValue)
+                        .collect(MoneyCollectors.sum(model.getCurrencyConverter().getTermCurrency()));
+    }
+
+    private boolean isFuture(Element element)
+    {
+        return isDerivative(element) && "FUTURE" //$NON-NLS-1$
+                        .equalsIgnoreCase(DerivativeExposure.property(element.getSecurity(), "instrumentType")); //$NON-NLS-1$
     }
 
     private boolean isDerivative(Element element)
