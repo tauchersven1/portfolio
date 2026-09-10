@@ -1,6 +1,7 @@
 package name.abuchen.portfolio.model;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.comparesEqualTo;
 import static org.hamcrest.Matchers.is;
 
 import java.math.BigDecimal;
@@ -18,8 +19,9 @@ public class SecurityMultiplierTest
 
         security.setPropertyValue(SecurityProperty.Type.FEED, SecurityMultiplier.HISTORY_PROPERTY_NAME,
                         "2026-01-01=10;2026-06-01=100"); //$NON-NLS-1$
-        assertThat(SecurityMultiplier.valueAt(security, LocalDate.of(2026, 5, 31)), is(BigDecimal.TEN));
-        assertThat(SecurityMultiplier.valueAt(security, LocalDate.of(2026, 6, 1)), is(BigDecimal.valueOf(100)));
+        assertThat(SecurityMultiplier.valueAt(security, LocalDate.of(2026, 5, 31)), comparesEqualTo(BigDecimal.TEN));
+        assertThat(SecurityMultiplier.valueAt(security, LocalDate.of(2026, 6, 1)),
+                        comparesEqualTo(BigDecimal.valueOf(100)));
     }
 
     @Test
