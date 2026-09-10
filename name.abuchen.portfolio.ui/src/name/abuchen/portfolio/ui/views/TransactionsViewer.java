@@ -1,5 +1,6 @@
 package name.abuchen.portfolio.ui.views;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
@@ -32,9 +33,11 @@ import org.eclipse.swt.widgets.Menu;
 import name.abuchen.portfolio.model.AccountTransaction;
 import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.Transaction;
 import name.abuchen.portfolio.model.TransactionPair;
 import name.abuchen.portfolio.money.Money;
+import name.abuchen.portfolio.money.Quote;
 import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.ui.Images;
 import name.abuchen.portfolio.ui.Messages;
@@ -357,7 +360,7 @@ public final class TransactionsViewer implements ModificationListener
         column.setLabelProvider(new TransactionLabelProvider(t -> {
             if (t instanceof PortfolioTransaction pt)
                 return t.getShares() != 0
-                                ? Values.CalculatedQuote.format(pt.getGrossPricePerShare(),
+                                ? Values.CalculatedQuote.format(transactionQuote(pt),
                                                 owner.getClient().getBaseCurrency())
                                 : null;
             else
@@ -365,7 +368,21 @@ public final class TransactionsViewer implements ModificationListener
         }));
         ColumnViewerSorter.create(e -> {
             Transaction tx = ((TransactionPair<?>) e).getTransaction();
-            return tx instanceof PortfolioTransaction pt ? pt.getGrossPricePerShare() : null;
+            return tx instanceof PortfolioTransaction pt ? transactionQuote(pt) : null;
+        }).attachTo(column);
+        support.addColumn(column);
+
+        column = new Column("multiplier", "Multiplier", SWT.RIGHT, 80); //$NON-NLS-1$ //$NON-NLS-2$
+        column.setLabelProvider(new TransactionLabelProvider(t -> t instanceof PortfolioTransaction pt
+                        && pt.getSecurity() != null
+                                        ? SecurityMultiplier.valueAt(pt.getSecurity(), pt.getDateTime().toLocalDate())
+                                                        .toPlainString()
+                                        : null));
+        ColumnViewerSorter.create(e -> {
+            Transaction tx = ((TransactionPair<?>) e).getTransaction();
+            return tx instanceof PortfolioTransaction pt && pt.getSecurity() != null
+                            ? SecurityMultiplier.valueAt(pt.getSecurity(), pt.getDateTime().toLocalDate())
+                            : null;
         }).attachTo(column);
         support.addColumn(column);
 
@@ -485,6 +502,16 @@ public final class TransactionsViewer implements ModificationListener
                         .attachTo(column);
         new StringEditingSupport(Transaction.class, "source").addListener(this).attachTo(column); //$NON-NLS-1$
         support.addColumn(column);
+    }
+
+    private Quote transactionQuote(PortfolioTransaction transaction)
+    {
+        BigDecimal multiplier = SecurityMultiplier.valueAt(transaction.getSecurity(),
+                        transaction.getDateTime().toLocalDate());
+        long amount = transaction.getGrossPricePerShare().toBigDecimal().divide(multiplier, Values.MC)
+                        .movePointRight(Values.Quote.precision()).setScale(0, java.math.RoundingMode.HALF_EVEN)
+                        .longValue();
+        return Quote.of(transaction.getCurrencyCode(), amount);
     }
 
     public ShowHideColumnHelper getColumnSupport()

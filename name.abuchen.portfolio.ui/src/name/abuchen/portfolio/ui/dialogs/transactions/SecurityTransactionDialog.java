@@ -137,6 +137,10 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
         quote.bindBigDecimal(Properties.quote.name(), Values.Quote.pattern());
         quote.bindCurrency(Properties.securityCurrencyCode.name());
 
+        Input multiplier = new Input(editArea, "x Multiplier"); //$NON-NLS-1$
+        multiplier.bindBigDecimal(Properties.multiplier.name(), Values.Quote.pattern());
+        multiplier.value.setEditable(false);
+
         Input grossValue = new Input(editArea, "="); //$NON-NLS-1$
         grossValue.bindValue(Properties.grossValue.name(), Messages.ColumnSubTotal, Values.Amount, true);
         grossValue.bindCurrency(Properties.securityCurrencyCode.name());
@@ -231,7 +235,8 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
         // shares - quote - gross value
         startingWith(dateTime.date.getControl()).thenBelow(shares.value).width(width).label(shares.label)
                         .thenRight(quote.label).thenRight(quote.value).width(width).thenRight(quote.currency)
-                        .width(width).thenRight(grossValue.label).thenRight(grossValue.value).width(width)
+                        .width(width).thenRight(multiplier.label).thenRight(multiplier.value).width(width)
+                        .thenRight(grossValue.label).thenRight(grossValue.value).width(width)
                         .thenRight(grossValue.currency);
 
         startingWith(quote.value).thenBelow(exchangeRate.value).width(width).label(exchangeRate.label)

@@ -14,6 +14,7 @@ import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityPrice;
+import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.ui.Messages;
 
@@ -137,5 +138,26 @@ public class BuySellModelTest
         assertThat(model.getQuote(), is(BigDecimal.valueOf(5.0)));
         assertThat(model.getSecurityCurrencyCode(), is("USD"));
         assertThat(model.getExchangeRate(), is(BigDecimal.ONE));
+    }
+
+    @SuppressWarnings("nls")
+    @Test
+    public void testDateDependentMultiplier()
+    {
+        var model = new BuySellModel(new Client(), PortfolioTransaction.Type.BUY);
+        var security = new Security("Option", "EUR");
+        security.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.multiplierHistory",
+                        "2026-01-01=10;2026-06-01=100");
+
+        model.setDate(LocalDate.of(2026, 2, 1));
+        model.setSecurity(security);
+        model.setShares(2L * Values.Share.factor());
+        model.setQuote(BigDecimal.valueOf(5));
+        assertThat(model.getMultiplier(), is(BigDecimal.TEN));
+        assertThat(model.getGrossValue(), is(100L * Values.Amount.factor()));
+
+        model.setDate(LocalDate.of(2026, 7, 1));
+        assertThat(model.getMultiplier(), is(BigDecimal.valueOf(100)));
+        assertThat(model.getGrossValue(), is(1000L * Values.Amount.factor()));
     }
 }

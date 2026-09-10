@@ -56,6 +56,7 @@ import name.abuchen.portfolio.model.Named;
 import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityEvent;
+import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.SecurityPrice;
 import name.abuchen.portfolio.model.TaxesAndFees;
 import name.abuchen.portfolio.model.Transaction;
@@ -2023,7 +2024,8 @@ public class SecuritiesChart
         Quote purchasePricePerShare = r.get().getCostPerSharesHeld(costMethod, TaxesAndFees.NOT_INCLUDED);
 
         return purchasePricePerShare.isZero() ? Optional.empty()
-                        : Optional.of(purchasePricePerShare.getAmount() / Values.Quote.divider());
+                        : Optional.of(purchasePricePerShare.getAmount() / Values.Quote.divider()
+                                        / SecurityMultiplier.valueAt(security, date).doubleValue());
     }
 
     private static class MessagePainter implements PaintListener, DisposeListener
