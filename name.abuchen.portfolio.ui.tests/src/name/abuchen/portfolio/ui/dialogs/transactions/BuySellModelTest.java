@@ -149,6 +149,8 @@ public class BuySellModelTest
         var security = new Security("Option", "EUR");
         security.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.multiplierHistory",
                         "2026-01-01=10;2026-06-01=100");
+        security.addPrice(new SecurityPrice(LocalDate.of(2026, 2, 1), 5L * Values.Quote.factor()));
+        security.addPrice(new SecurityPrice(LocalDate.of(2026, 7, 1), 5L * Values.Quote.factor()));
 
         model.setSecurity(security);
         model.setDate(LocalDate.of(2026, 2, 1));
