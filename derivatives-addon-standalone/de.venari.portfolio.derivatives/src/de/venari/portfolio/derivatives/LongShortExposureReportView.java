@@ -9,9 +9,12 @@ import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.PaintEvent;
+import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.GC;
+import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Canvas;
+import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Label;
@@ -26,12 +29,25 @@ import name.abuchen.portfolio.snapshot.AssetPosition;
 import name.abuchen.portfolio.snapshot.ClientSnapshot;
 import name.abuchen.portfolio.ui.AddonView;
 import name.abuchen.portfolio.ui.AddonViewContext;
+import name.abuchen.portfolio.ui.util.Colors;
 
 public class LongShortExposureReportView implements AddonView
 {
     private enum Bucket
     {
         GROSS, LONG, SHORT
+    }
+
+    private enum Measure
+    {
+        GROSS("Gross Exposure"), NET("Net Exposure"), NOTIONAL("Notional"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+
+        private final String label;
+
+        Measure(String label)
+        {
+            this.label = label;
+        }
     }
 
     private record Entry(String label, long amount)
@@ -41,6 +57,7 @@ public class LongShortExposureReportView implements AddonView
     private AddonViewContext context;
     private CurrencyConverter converter;
     private List<Entry> entries = List.of();
+    private Combo measure;
 
     private Canvas grossChart;
     private Canvas longChart;
@@ -54,11 +71,24 @@ public class LongShortExposureReportView implements AddonView
                         context.getClient().getBaseCurrency());
 
         Composite body = new Composite(parent, SWT.NONE);
-        GridLayoutFactory.fillDefaults().numColumns(3).equalWidth(true).margins(8, 8).spacing(8, 8).applyTo(body);
+        GridLayoutFactory.fillDefaults().margins(8, 8).spacing(8, 8).applyTo(body);
 
-        grossChart = createChart(body, "Gross Exposure", Bucket.GROSS); //$NON-NLS-1$
-        longChart = createChart(body, "Long Exposure", Bucket.LONG); //$NON-NLS-1$
-        shortChart = createChart(body, "Short Exposure", Bucket.SHORT); //$NON-NLS-1$
+        Composite controls = new Composite(body, SWT.NONE);
+        GridLayoutFactory.fillDefaults().numColumns(2).spacing(8, 0).applyTo(controls);
+        GridDataFactory.fillDefaults().grab(true, false).applyTo(controls);
+        new Label(controls, SWT.NONE).setText("Bezugsgröße"); //$NON-NLS-1$
+        measure = new Combo(controls, SWT.READ_ONLY);
+        measure.setItems(java.util.Arrays.stream(Measure.values()).map(m -> m.label).toArray(String[]::new));
+        measure.select(1);
+        measure.addListener(SWT.Selection, e -> refresh());
+
+        Composite charts = new Composite(body, SWT.NONE);
+        GridLayoutFactory.fillDefaults().numColumns(3).equalWidth(true).spacing(8, 8).applyTo(charts);
+        GridDataFactory.fillDefaults().grab(true, true).applyTo(charts);
+
+        grossChart = createChart(charts, "Gesamt", Bucket.GROSS); //$NON-NLS-1$
+        longChart = createChart(charts, "Long", Bucket.LONG); //$NON-NLS-1$
+        shortChart = createChart(charts, "Short", Bucket.SHORT); //$NON-NLS-1$
 
         refresh();
         return body;
@@ -114,7 +144,8 @@ public class LongShortExposureReportView implements AddonView
         {
             DerivativeExposure.Result result = DerivativeExposure.calculate(context.getClient(), asset,
                             LocalDate.now());
-            exposure = result.net();
+            if (result != null)
+                exposure = selectedValue(result, marketValue);
         }
 
         if (!exposure.isZero())
@@ -145,17 +176,13 @@ public class LongShortExposureReportView implements AddonView
         int holeX = x + (diameter - hole) / 2;
         int holeY = y + (diameter - hole) / 2;
 
-        int[] systemColors = { SWT.COLOR_BLUE, SWT.COLOR_DARK_YELLOW, SWT.COLOR_DARK_GREEN, SWT.COLOR_MAGENTA,
-                        SWT.COLOR_DARK_CYAN, SWT.COLOR_DARK_RED, SWT.COLOR_DARK_BLUE, SWT.COLOR_DARK_MAGENTA };
-
         int start = 0;
         for (int index = 0; index < values.size(); index++)
         {
             Entry entry = values.get(index);
             int arc = index == values.size() - 1 ? 360 - start
                             : (int) Math.round(360d * entry.amount() / total);
-            gc.setBackground(context.getShell().getDisplay()
-                            .getSystemColor(systemColors[index % systemColors.length]));
+            gc.setBackground(pieColor(index));
             gc.fillArc(x, y, diameter, diameter, start, arc);
             start += arc;
         }
@@ -174,8 +201,7 @@ public class LongShortExposureReportView implements AddonView
         for (int index = 0; index < rowCount; index++)
         {
             Entry entry = values.get(index);
-            gc.setBackground(context.getShell().getDisplay()
-                            .getSystemColor(systemColors[index % systemColors.length]));
+            gc.setBackground(pieColor(index));
             gc.fillRectangle(12, legendY + index * 20 + 3, 12, 12);
 
             double share = (double) entry.amount() / total;
@@ -191,6 +217,32 @@ public class LongShortExposureReportView implements AddonView
             String more = "+" + (values.size() - rowCount) + " more"; //$NON-NLS-1$ //$NON-NLS-2$
             gc.drawText(more, 30, legendY + rowCount * 20, true);
         }
+    }
+
+    private Money selectedValue(DerivativeExposure.Result result, Money marketValue)
+    {
+        Measure selected = Measure.values()[measure.getSelectionIndex()];
+        Money value = switch (selected)
+        {
+            case GROSS -> result.gross();
+            case NET -> result.net();
+            case NOTIONAL -> result.notional();
+        };
+        if (value == null)
+            return marketValue;
+
+        if (selected == Measure.GROSS && result.net() != null && result.net().isNegative())
+            return Money.of(value.getCurrencyCode(), -Math.abs(value.getAmount()));
+        return value;
+    }
+
+    private Color pieColor(int index)
+    {
+        int size = 11;
+        float hue = 262.3f;
+        float saturation = 0.464f;
+        float brightness = Math.min(1.0f, 0.886f + (0.05f * (index / (float) size)));
+        return Colors.getColor(new RGB((hue + ((360.0f / size) * index)) % 360f, saturation, brightness));
     }
 
     private boolean include(Entry entry, Bucket bucket)

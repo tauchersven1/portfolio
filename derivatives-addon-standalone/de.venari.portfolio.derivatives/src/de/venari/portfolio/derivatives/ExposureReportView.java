@@ -42,14 +42,27 @@ import name.abuchen.portfolio.ui.AddonViewContext;
 
 public class ExposureReportView implements AddonView
 {
+    private enum Measure
+    {
+        GROSS("Gross Exposure"), NET("Net Exposure"), NOTIONAL("Notional"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+
+        private final String label;
+
+        Measure(String label)
+        {
+            this.label = label;
+        }
+    }
+
     private static final String ALL = "All"; //$NON-NLS-1$
     private static final String NO_MATURITY = "No maturity"; //$NON-NLS-1$
     private static final String OPEN_END = "Open End"; //$NON-NLS-1$
     private static final String TOTAL = "Total"; //$NON-NLS-1$
     private static final DateTimeFormatter MONTH_FORMAT = DateTimeFormatter.ofPattern("MMM yy", Locale.getDefault());
 
-    private record Row(Security security, Money exposure, String maturity, LocalDate maturityDate,
-                    String instrumentType, String putCall, String underlying, String tradingSymbol)
+    private record Row(Security security, Money marketValue, DerivativeExposure.Result exposure, String maturity,
+                    LocalDate maturityDate, String instrumentType, String putCall, String underlying,
+                    String tradingSymbol)
     {
     }
 
@@ -60,6 +73,7 @@ public class ExposureReportView implements AddonView
     private Combo maturityRange;
     private Combo groupBy;
     private Combo totalBar;
+    private Combo measure;
 
     private Label grossValue;
     private Label netValue;
@@ -100,7 +114,7 @@ public class ExposureReportView implements AddonView
     {
         Group filters = new Group(parent, SWT.NONE);
         filters.setText("Filters"); //$NON-NLS-1$
-        GridLayoutFactory.fillDefaults().numColumns(5).margins(8, 8).spacing(10, 4).applyTo(filters);
+        GridLayoutFactory.fillDefaults().numColumns(6).margins(8, 8).spacing(10, 4).applyTo(filters);
         GridDataFactory.fillDefaults().grab(true, false).applyTo(filters);
 
         instrumentType = combo(filters, "Instrument type", ALL, "Derivatives", "Option", "Future", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
@@ -109,8 +123,11 @@ public class ExposureReportView implements AddonView
         maturityRange = combo(filters, "Maturity range", ALL, "3M", "6M", "1Y"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
         groupBy = combo(filters, "Group by", "Put / Call", "Instrument type", "Underlying"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
         totalBar = combo(filters, "Total bar", "Show", "Hide"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        measure = combo(filters, "Bezugsgröße", java.util.Arrays.stream(Measure.values()).map(m -> m.label)
+                        .toArray(String[]::new)); //$NON-NLS-1$
+        measure.select(1);
 
-        List.of(instrumentType, direction, maturityRange, groupBy, totalBar)
+        List.of(instrumentType, direction, maturityRange, groupBy, totalBar, measure)
                         .forEach(c -> c.addListener(SWT.Selection, e -> refreshReport()));
     }
 
@@ -199,13 +216,11 @@ public class ExposureReportView implements AddonView
             return;
 
         DerivativeExposure.Result result = DerivativeExposure.calculate(context.getClient(), asset, valuationDate);
-        Money exposure = result.net();
-
         LocalDate maturityDate = maturityDate(security);
         String maturity = maturityDate != null ? YearMonth.from(maturityDate).format(MONTH_FORMAT)
                         : isKnockout(security) ? OPEN_END : NO_MATURITY;
 
-        answer.add(new Row(security, exposure, maturity, maturityDate, instrumentType(security),
+        answer.add(new Row(security, asset.getValuation(), result, maturity, maturityDate, instrumentType(security),
                         putCall(security), underlying(security), tradingSymbol(security)));
     }
 
@@ -216,10 +231,10 @@ public class ExposureReportView implements AddonView
 
         List<Row> filtered = rows.stream().filter(this::matchesFilters).toList();
 
-        long gross = filtered.stream().mapToLong(r -> Math.abs(r.exposure().getAmount())).sum();
-        long net = filtered.stream().mapToLong(r -> r.exposure().getAmount()).sum();
-        long longExposure = filtered.stream().mapToLong(r -> Math.max(0L, r.exposure().getAmount())).sum();
-        long shortExposure = filtered.stream().mapToLong(r -> Math.min(0L, r.exposure().getAmount())).sum();
+        long gross = filtered.stream().mapToLong(r -> Math.abs(selectedValue(r).getAmount())).sum();
+        long net = filtered.stream().mapToLong(r -> selectedValue(r).getAmount()).sum();
+        long longExposure = filtered.stream().mapToLong(r -> Math.max(0L, selectedValue(r).getAmount())).sum();
+        long shortExposure = filtered.stream().mapToLong(r -> Math.min(0L, selectedValue(r).getAmount())).sum();
 
         String ccy = converter.getTermCurrency();
         grossValue.setText(Values.Money.format(Money.of(ccy, gross)));
@@ -247,9 +262,9 @@ public class ExposureReportView implements AddonView
         if ("Non-derivatives".equals(selectedType) && derivative) //$NON-NLS-1$
             return false;
 
-        if ("Long".equals(direction.getText()) && !row.exposure().isPositive()) //$NON-NLS-1$
+        if ("Long".equals(direction.getText()) && !selectedValue(row).isPositive()) //$NON-NLS-1$
             return false;
-        if ("Short".equals(direction.getText()) && !row.exposure().isNegative()) //$NON-NLS-1$
+        if ("Short".equals(direction.getText()) && !selectedValue(row).isNegative()) //$NON-NLS-1$
             return false;
 
         if (row.maturityDate() != null && !ALL.equals(maturityRange.getText()))
@@ -285,7 +300,7 @@ public class ExposureReportView implements AddonView
         if (totalBar.getSelectionIndex() == 0)
         {
             Map<String, Long> total = new LinkedHashMap<>();
-            filtered.forEach(row -> total.merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
+            filtered.forEach(row -> total.merge(groupLabel(row), selectedValue(row).getAmount(), Long::sum));
             values.put(TOTAL, total);
         }
 
@@ -296,7 +311,7 @@ public class ExposureReportView implements AddonView
         filtered.stream().sorted(comparator).forEach(row -> values
                         .computeIfAbsent(byTradingSymbol ? row.tradingSymbol() : row.maturity(),
                                         key -> new LinkedHashMap<>())
-                        .merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
+                        .merge(groupLabel(row), selectedValue(row).getAmount(), Long::sum));
 
         Set<String> groups = new LinkedHashSet<>();
         values.values().forEach(bucket -> groups.addAll(bucket.keySet()));
@@ -394,6 +409,27 @@ public class ExposureReportView implements AddonView
         while (length > 1 && gc.textExtent(label.substring(0, length) + suffix).x > maxWidth)
             length--;
         return label.substring(0, length) + suffix;
+    }
+
+    private Money selectedValue(Row row)
+    {
+        DerivativeExposure.Result result = row.exposure();
+        if (result == null)
+            return row.marketValue();
+
+        Measure selected = Measure.values()[measure.getSelectionIndex()];
+        Money value = switch (selected)
+        {
+            case GROSS -> result.gross();
+            case NET -> result.net();
+            case NOTIONAL -> result.notional();
+        };
+        if (value == null)
+            return row.marketValue();
+
+        if (selected == Measure.GROSS && result.net() != null && result.net().isNegative())
+            return Money.of(value.getCurrencyCode(), -Math.abs(value.getAmount()));
+        return value;
     }
 
     private String groupLabel(Row row)
