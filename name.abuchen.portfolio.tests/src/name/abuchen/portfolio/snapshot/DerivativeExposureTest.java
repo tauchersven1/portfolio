@@ -33,11 +33,13 @@ public class DerivativeExposureTest
         option.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.multiplierHistory",
                         "2026-01-01=10;2027-01-01=20");
         option.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.deltaHistory", "2026-01-01=0.5");
+        option.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.strike", "150");
 
         DerivativeExposure.Result result = DerivativeExposure.calculate(client, position(option, 2), DATE);
 
-        assertThat(result.net(), is(Money.of(CurrencyUnit.EUR, 100000)));
-        assertThat(result.gross(), is(Money.of(CurrencyUnit.EUR, 100000)));
+        assertThat(result.net(), is(Money.of(CurrencyUnit.EUR, 15000000)));
+        assertThat(result.gross(), is(Money.of(CurrencyUnit.EUR, 15000000)));
+        assertThat(result.notional(), is(Money.of(CurrencyUnit.EUR, 30000000)));
     }
 
     @Test
@@ -49,12 +51,30 @@ public class DerivativeExposureTest
         put.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.putCall", "PUT");
         put.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.multiplierHistory", "2026-01-01=10");
         put.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.deltaHistory", "2026-01-01=0.5");
+        put.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.strike", "150");
 
         DerivativeExposure.Result longPut = DerivativeExposure.calculate(client, position(put, 2), DATE);
         DerivativeExposure.Result shortPut = DerivativeExposure.calculate(client, position(put, -2), DATE);
 
-        assertThat(longPut.net(), is(Money.of(CurrencyUnit.EUR, -100000)));
-        assertThat(shortPut.net(), is(Money.of(CurrencyUnit.EUR, 100000)));
+        assertThat(longPut.net(), is(Money.of(CurrencyUnit.EUR, -15000000)));
+        assertThat(shortPut.net(), is(Money.of(CurrencyUnit.EUR, 15000000)));
+        assertThat(longPut.notional(), is(Money.of(CurrencyUnit.EUR, 30000000)));
+        assertThat(shortPut.notional(), is(Money.of(CurrencyUnit.EUR, -30000000)));
+    }
+
+    @Test
+    public void testFutureNotionalUsesPriceAndMultiplierWithoutDelta()
+    {
+        Client client = new Client();
+        Security future = security("Future", 100);
+        future.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.instrumentType", "FUTURE");
+        future.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.multiplierHistory", "2026-01-01=10");
+        future.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.deltaHistory", "2026-01-01=0.25");
+
+        DerivativeExposure.Result result = DerivativeExposure.calculate(client, position(future, 2), DATE);
+
+        assertThat(result.net(), is(Money.of(CurrencyUnit.EUR, 50000)));
+        assertThat(result.notional(), is(Money.of(CurrencyUnit.EUR, 200000)));
     }
 
     @Test
