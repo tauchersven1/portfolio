@@ -1,6 +1,5 @@
 package de.venari.portfolio.derivatives;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -29,6 +28,7 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.TabFolder;
 import org.eclipse.swt.widgets.TabItem;
 
+import name.abuchen.portfolio.model.DerivativeExposure;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.money.CurrencyConverter;
@@ -198,9 +198,8 @@ public class ExposureReportView implements AddonView
         if (security == null)
             return;
 
-        Money marketValue = asset.getValuation();
-        BigDecimal multiplier = AddonMultiplier.get(security);
-        Money exposure = marketValue.multiplyAndRound(multiplier.doubleValue());
+        DerivativeExposure.Result result = DerivativeExposure.calculate(context.getClient(), asset, valuationDate);
+        Money exposure = result.net();
 
         LocalDate maturityDate = maturityDate(security);
         String maturity = maturityDate != null ? YearMonth.from(maturityDate).format(MONTH_FORMAT)
