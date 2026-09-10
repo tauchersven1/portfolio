@@ -139,6 +139,7 @@ public class SecurityTransactionDialog extends AbstractTransactionDialog // NOSO
 
         Input multiplier = new Input(editArea, "x Multiplier"); //$NON-NLS-1$
         multiplier.bindBigDecimal(Properties.multiplier.name(), Values.Quote.pattern());
+        // The dated value is maintained in the security master data.
         multiplier.value.setEditable(false);
 
         Input grossValue = new Input(editArea, "="); //$NON-NLS-1$
