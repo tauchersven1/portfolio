@@ -46,6 +46,11 @@ public final class DerivativeExposure
         {
             BigDecimal strike = decimalProperty(security, "strike", BigDecimal.ONE); //$NON-NLS-1$
             notionalFactor = notionalFactor.multiply(strike, Values.MC);
+            BigDecimal optionPrice = BigDecimal.valueOf(position.getPosition().getPrice().getValue())
+                            .movePointLeft(Values.Quote.precision());
+            if (optionPrice.signum() == 0)
+                return null;
+            notionalFactor = notionalFactor.divide(optionPrice, Values.MC);
             factor = notionalFactor.multiply(directionalDelta, Values.MC);
         }
         else
