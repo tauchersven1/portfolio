@@ -6,7 +6,10 @@ on:
       - agent/derivatives-addon-standalone
       - agent/derivatives-addon-security-tab
     paths:
+      - 'name.abuchen.portfolio/**'
+      - 'name.abuchen.portfolio.tests/**'
       - 'name.abuchen.portfolio.ui/**'
+      - 'name.abuchen.portfolio.ui.tests/**'
       - 'portfolio-app/**'
       - 'portfolio-product/**'
       - '.github/workflows/derivatives-bridge-windows.yml'

@@ -7,12 +7,18 @@ on:
       - agent/derivatives-addon-security-tab
     paths:
       - 'derivatives-addon-standalone/**'
+      - 'name.abuchen.portfolio/**'
+      - 'name.abuchen.portfolio.tests/**'
       - 'name.abuchen.portfolio.ui/**'
+      - 'name.abuchen.portfolio.ui.tests/**'
       - '.github/workflows/derivatives-addon-standalone.yml'
   pull_request:
     paths:
       - 'derivatives-addon-standalone/**'
+      - 'name.abuchen.portfolio/**'
+      - 'name.abuchen.portfolio.tests/**'
       - 'name.abuchen.portfolio.ui/**'
+      - 'name.abuchen.portfolio.ui.tests/**'
       - '.github/workflows/derivatives-addon-standalone.yml'
   workflow_dispatch:
 
