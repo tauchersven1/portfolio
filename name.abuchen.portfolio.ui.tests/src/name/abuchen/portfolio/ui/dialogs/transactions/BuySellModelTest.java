@@ -149,8 +149,8 @@ public class BuySellModelTest
         security.setPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon.multiplierHistory",
                         "2026-01-01=10;2026-06-01=100");
 
-        model.setDate(LocalDate.of(2026, 2, 1));
         model.setSecurity(security);
+        model.setDate(LocalDate.of(2026, 2, 1));
         model.setShares(2L * Values.Share.factor());
         model.setQuote(BigDecimal.valueOf(5));
         assertThat(model.getMultiplier(), is(BigDecimal.TEN));

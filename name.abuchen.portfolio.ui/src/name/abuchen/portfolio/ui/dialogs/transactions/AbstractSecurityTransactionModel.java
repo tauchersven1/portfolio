@@ -634,9 +634,10 @@ public abstract class AbstractSecurityTransactionModel extends AbstractModel
     {
         if (shares == 0 || multiplier.signum() == 0)
             return BigDecimal.ZERO;
-        return BigDecimal.valueOf(value).multiply(BigDecimal.valueOf(Values.Share.factor()))
+        BigDecimal result = BigDecimal.valueOf(value).multiply(BigDecimal.valueOf(Values.Share.factor()))
                         .divide(BigDecimal.valueOf(shares).multiply(BigDecimal.valueOf(Values.Amount.divider()))
                                         .multiply(multiplier), Values.MC);
+        return result.setScale(Math.max(1, result.scale()), RoundingMode.UNNECESSARY);
     }
 
     public abstract String getTransactionCurrencyCode();
