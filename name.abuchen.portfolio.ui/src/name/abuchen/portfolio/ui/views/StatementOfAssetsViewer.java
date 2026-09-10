@@ -2,6 +2,7 @@ package name.abuchen.portfolio.ui.views;
 
 import static name.abuchen.portfolio.util.CollectorsUtil.toMutableList;
 
+import java.math.BigDecimal;
 import java.text.MessageFormat;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -57,6 +58,7 @@ import name.abuchen.portfolio.model.Attributable;
 import name.abuchen.portfolio.model.Classification;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.CostMethod;
+import name.abuchen.portfolio.model.DerivativeExposure;
 import name.abuchen.portfolio.model.InvestmentVehicle;
 import name.abuchen.portfolio.model.Named;
 import name.abuchen.portfolio.model.Portfolio;
@@ -620,6 +622,7 @@ public class StatementOfAssetsViewer
         addDividendColumns(options);
         addTaxonomyColumns();
         addAttributeColumns();
+        addDerivativeColumns();
         addCurrencyColumns();
 
         column = new DistanceFromMovingAverageColumn(() -> model.getDate());
@@ -880,6 +883,111 @@ public class StatementOfAssetsViewer
                             column.getEditingSupport().addListener(new MarkDirtyClientListener(client));
                             support.addColumn(column);
                         });
+    }
+
+    private void addDerivativeColumns()
+    {
+        addDerivativeTextColumn("derivative.instrumentType", "Instrumenttyp", "instrumentType"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.underlying", "Underlying", "underlying"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.exchange", "Börse", "exchange"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.contractSymbol", "Kontrakt- / Handelssymbol", "contractSymbol"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.expirationDate", "Fälligkeit", "expirationDate"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.fxInstrument", "FX-Instrument", "fxInstrument"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.underlyingCurrency", "Underlying-Währung", "underlyingCurrency"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.pricingCurrency", "Preiswährung", "pricingCurrency"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.contractMonth", "Kontraktmonat", "contractMonth"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.firstNoticeDate", "First Notice Day", "firstNoticeDate"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.lastTradingDate", "Last Trading Date", "lastTradingDate"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.putCall", "Put / Call", "putCall"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.strike", "Basispreis", "strike"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.exerciseStyle", "Ausübungsart", "exerciseStyle"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeTextColumn("derivative.issuer", "Emittent", "issuer"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        addDerivativeValueColumn("derivative.multiplier", "Multiplier", result -> result.multiplier()); //$NON-NLS-1$ //$NON-NLS-2$
+        addDerivativeValueColumn("derivative.delta", "Delta", result -> result.delta()); //$NON-NLS-1$ //$NON-NLS-2$
+        addDerivativeValueColumn("derivative.knockOutLevel", "K.O. Level", result -> result.knockOutLevel()); //$NON-NLS-1$ //$NON-NLS-2$
+        addDerivativeValueColumn("derivative.leverage", "Hebel", result -> result.leverage()); //$NON-NLS-1$ //$NON-NLS-2$
+        addDerivativeMoneyColumn("derivative.grossExposure", "Grossexposure", true); //$NON-NLS-1$ //$NON-NLS-2$
+        addDerivativeMoneyColumn("derivative.netExposure", "Netexposure", false); //$NON-NLS-1$ //$NON-NLS-2$
+    }
+
+    private void addDerivativeTextColumn(String id, String label, String property)
+    {
+        Column column = new Column(id, label, SWT.LEFT, 100);
+        column.setGroupLabel("Derivate"); //$NON-NLS-1$
+        column.setLabelProvider(new ColumnLabelProvider()
+        {
+            @Override
+            public String getText(Object e)
+            {
+                Element element = (Element) e;
+                return isDerivative(element) ? DerivativeExposure.property(element.getSecurity(), property) : null;
+            }
+        });
+        column.setVisible(false);
+        support.addColumn(column);
+    }
+
+    private void addDerivativeValueColumn(String id, String label,
+                    Function<DerivativeExposure.Result, BigDecimal> valueProvider)
+    {
+        Column column = new Column(id, label, SWT.RIGHT, 90);
+        column.setGroupLabel("Derivate"); //$NON-NLS-1$
+        column.setLabelProvider(new ColumnLabelProvider()
+        {
+            @Override
+            public String getText(Object e)
+            {
+                Element element = (Element) e;
+                if (!isDerivative(element))
+                    return null;
+                DerivativeExposure.Result result = DerivativeExposure.calculate(client, element.getPosition(),
+                                model.getDate());
+                BigDecimal value = result != null ? valueProvider.apply(result) : null;
+                return value != null ? value.stripTrailingZeros().toPlainString() : null;
+            }
+        });
+        column.setVisible(false);
+        support.addColumn(column);
+    }
+
+    private void addDerivativeMoneyColumn(String id, String label, boolean gross)
+    {
+        Column column = new Column(id, label, SWT.RIGHT, 110);
+        column.setGroupLabel("Derivate"); //$NON-NLS-1$
+        column.setLabelProvider(new ColumnLabelProvider()
+        {
+            @Override
+            public String getText(Object e)
+            {
+                Money value = derivativeExposure((Element) e, gross);
+                return value != null ? Values.Money.format(value) : null;
+            }
+        });
+        column.setVisible(false);
+        support.addColumn(column);
+    }
+
+    private Money derivativeExposure(Element element, boolean gross)
+    {
+        if (isDerivative(element))
+        {
+            DerivativeExposure.Result result = DerivativeExposure.calculate(client, element.getPosition(),
+                            model.getDate());
+            return result == null ? null : gross ? result.gross() : result.net();
+        }
+
+        List<Money> values = element.getChildren().map(child -> derivativeExposure(child, gross))
+                        .filter(Objects::nonNull).toList();
+        if (values.isEmpty())
+            return null;
+        long amount = values.stream().mapToLong(Money::getAmount).sum();
+        return Money.of(model.getCurrencyConverter().getTermCurrency(), amount);
+    }
+
+    private boolean isDerivative(Element element)
+    {
+        return element.isSecurity()
+                        && DerivativeExposure.property(element.getSecurity(), "instrumentType") != null; //$NON-NLS-1$
     }
 
     private void addTaxonomyColumns()
