@@ -140,7 +140,7 @@ public class LongShortExposureReportView implements AddonView
         Money marketValue = asset.getValuation();
         Money exposure = marketValue;
 
-        if (security != null)
+        if (security != null && DerivativeExposure.property(security, "instrumentType") != null) //$NON-NLS-1$
         {
             DerivativeExposure.Result result = DerivativeExposure.calculate(context.getClient(), asset,
                             LocalDate.now());

@@ -212,16 +212,17 @@ public class ExposureReportView implements AddonView
     private void addRow(List<Row> answer, AssetPosition asset)
     {
         Security security = asset.getSecurity();
-        if (security == null)
-            return;
-
-        DerivativeExposure.Result result = DerivativeExposure.calculate(context.getClient(), asset, valuationDate);
+        boolean derivative = security != null && property(security, "instrumentType") != null; //$NON-NLS-1$
+        DerivativeExposure.Result result = derivative
+                        ? DerivativeExposure.calculate(context.getClient(), asset, valuationDate)
+                        : null;
         LocalDate maturityDate = maturityDate(security);
         String maturity = maturityDate != null ? YearMonth.from(maturityDate).format(MONTH_FORMAT)
                         : isKnockout(security) ? OPEN_END : NO_MATURITY;
 
         answer.add(new Row(security, asset.getValuation(), result, maturity, maturityDate, instrumentType(security),
-                        putCall(security), underlying(security), tradingSymbol(security)));
+                        putCall(security), underlying(security, asset.getDescription()),
+                        tradingSymbol(security, asset.getDescription())));
     }
 
     private void refreshReport()
@@ -249,7 +250,7 @@ public class ExposureReportView implements AddonView
     private boolean matchesFilters(Row row)
     {
         String selectedType = instrumentType.getText();
-        boolean derivative = !"Security".equals(row.instrumentType()); //$NON-NLS-1$
+        boolean derivative = row.exposure() != null;
 
         if ("Derivatives".equals(selectedType) && !derivative) //$NON-NLS-1$
             return false;
@@ -453,6 +454,8 @@ public class ExposureReportView implements AddonView
 
     private String instrumentType(Security security)
     {
+        if (security == null)
+            return "Account"; //$NON-NLS-1$
         String value = property(security, "instrumentType"); //$NON-NLS-1$
         if ("OPTION".equalsIgnoreCase(value)) //$NON-NLS-1$
             return "Option"; //$NON-NLS-1$
@@ -473,14 +476,18 @@ public class ExposureReportView implements AddonView
         return instrumentType(security);
     }
 
-    private String underlying(Security security)
+    private String underlying(Security security, String fallback)
     {
+        if (security == null)
+            return fallback;
         String value = property(security, "underlying"); //$NON-NLS-1$
         return value == null || value.isBlank() ? security.getName() : value;
     }
 
-    private String tradingSymbol(Security security)
+    private String tradingSymbol(Security security, String fallback)
     {
+        if (security == null)
+            return fallback;
         String value = property(security, "contractSymbol"); //$NON-NLS-1$
         if (value != null && !value.isBlank())
             return value;
@@ -511,6 +518,8 @@ public class ExposureReportView implements AddonView
 
     private String property(Security security, String name)
     {
+        if (security == null)
+            return null;
         return security.getPropertyValue(SecurityProperty.Type.FEED, "derivatives-addon." + name).orElse(null); //$NON-NLS-1$
     }
 }
