@@ -61,11 +61,11 @@ public final class DerivativeExposure
         if ("KNOCK_OUT_CERTIFICATE".equalsIgnoreCase(instrumentType)) //$NON-NLS-1$
         {
             leverage = calculateLeverage(client, security, knockOutLevel, date);
-            factor = leverage != null ? put ? leverage.negate() : leverage : BigDecimal.ZERO;
+            factor = leverage != null ? put ? leverage.negate() : leverage : null;
         }
 
-        Money net = marketValue.multiplyAndRound(factor.doubleValue());
-        Money gross = Money.of(net.getCurrencyCode(), Math.abs(net.getAmount()));
+        Money net = factor != null ? marketValue.multiplyAndRound(factor.doubleValue()) : null;
+        Money gross = net != null ? Money.of(net.getCurrencyCode(), Math.abs(net.getAmount())) : null;
         Money notional = "KNOCK_OUT_CERTIFICATE".equalsIgnoreCase(instrumentType) ? null //$NON-NLS-1$
                         : marketValue.multiplyAndRound(notionalFactor.doubleValue());
         return new Result(gross, net, notional, multiplier, delta, leverage, knockOutLevel);

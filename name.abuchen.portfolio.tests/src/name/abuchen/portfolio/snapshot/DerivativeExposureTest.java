@@ -101,6 +101,19 @@ public class DerivativeExposureTest
         assertThat(shortResult.gross(), is(Money.of(CurrencyUnit.EUR, 8000)));
     }
 
+    @Test
+    public void testKnockOutWithoutLeverageLeavesExposureEmptyForMarketValueFallback()
+    {
+        Client client = new Client();
+        Security certificate = knockOut("KO without underlying", "CALL", 100);
+
+        DerivativeExposure.Result result = DerivativeExposure.calculate(client, position(certificate, 2), DATE);
+
+        assertThat(result.net(), is((Money) null));
+        assertThat(result.gross(), is((Money) null));
+        assertThat(result.notional(), is((Money) null));
+    }
+
     private Security knockOut(String name, String putCall, int level)
     {
         Security security = security(name, 10);

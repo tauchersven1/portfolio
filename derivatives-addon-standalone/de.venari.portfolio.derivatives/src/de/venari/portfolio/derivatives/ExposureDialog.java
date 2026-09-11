@@ -262,7 +262,7 @@ public class ExposureDialog extends Dialog
         DerivativeExposure.Result result = DerivativeExposure.calculate(client, asset, valuationDate);
         BigDecimal multiplier = result.leverage() != null ? result.leverage()
                         : result.multiplier().multiply(result.delta(), Values.MC);
-        Money exposure = result.net();
+        Money exposure = result.net() != null ? result.net() : value;
 
         LocalDate maturityDate = maturityDate(security);
         String maturity = maturityDate != null ? YearMonth.from(maturityDate).format(MONTH_FORMAT)
