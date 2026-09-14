@@ -8,7 +8,6 @@ import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.LatestSecurityPrice;
 import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.Security;
-import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.SecurityPrice;
 import name.abuchen.portfolio.model.Transaction;
 import name.abuchen.portfolio.model.TransactionPair;
@@ -69,7 +68,7 @@ public class QuoteFromTransactionExtractor
                  * must remain raw market quotes; valuation and exposure apply the
                  * multiplier later.
                  */
-                BigDecimal multiplier = SecurityMultiplier.valueAt(security, d);
+                BigDecimal multiplier = BigDecimal.valueOf(security.getMultiplier(d));
                 if (multiplier.compareTo(BigDecimal.ONE) != 0)
                 {
                     long rawAmount = BigDecimal.valueOf(q.getAmount())
