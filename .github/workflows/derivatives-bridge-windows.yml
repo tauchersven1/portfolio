@@ -5,6 +5,7 @@ on:
     branches:
       - agent/derivatives-addon-standalone
       - agent/derivatives-addon-security-tab
+      - agent/bridge18-from-bridge17
     paths:
       - 'name.abuchen.portfolio/**'
       - 'name.abuchen.portfolio.tests/**'
