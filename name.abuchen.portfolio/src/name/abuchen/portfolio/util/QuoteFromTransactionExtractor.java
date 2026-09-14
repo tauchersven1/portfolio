@@ -1,11 +1,14 @@
 package name.abuchen.portfolio.util;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.LatestSecurityPrice;
 import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.SecurityPrice;
 import name.abuchen.portfolio.model.Transaction;
 import name.abuchen.portfolio.model.TransactionPair;
@@ -58,11 +61,27 @@ public class QuoteFromTransactionExtractor
                 // get date and quote and build a price from it
                 Quote q = pt.getGrossPricePerShare();
                 LocalDate d = pt.getDateTime().toLocalDate();
-                
+
+                /*
+                 * The transaction model stores multiplier-aware gross values. For
+                 * securities with a multiplier, getGrossPricePerShare() therefore
+                 * represents market quote * multiplier. Historical security prices
+                 * must remain raw market quotes; valuation and exposure apply the
+                 * multiplier later.
+                 */
+                BigDecimal multiplier = SecurityMultiplier.valueAt(security, d);
+                if (multiplier.compareTo(BigDecimal.ONE) != 0)
+                {
+                    long rawAmount = BigDecimal.valueOf(q.getAmount())
+                                    .divide(multiplier, 0, RoundingMode.HALF_UP)
+                                    .longValue();
+                    q = Quote.of(q.getCurrencyCode(), rawAmount);
+                }
+
                 // check if currency conversion is needed
                 if (!q.getCurrencyCode().equals(security.getCurrencyCode()))
                     q = converter.with(security.getCurrencyCode()).convert(d, q);
-                
+
                 SecurityPrice price = new SecurityPrice(d, q.getAmount());
                 bChanges |= security.addPrice(price);
                 // remember the latest price
