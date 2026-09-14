@@ -19,7 +19,9 @@ import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Portfolio;
 import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.model.SecurityMultiplier;
 import name.abuchen.portfolio.model.SecurityPrice;
+import name.abuchen.portfolio.model.SecurityProperty;
 import name.abuchen.portfolio.model.Transaction.Unit;
 import name.abuchen.portfolio.money.CurrencyUnit;
 import name.abuchen.portfolio.money.Money;
@@ -69,6 +71,26 @@ public class QuoteFromTransactionExtractorTest
         assertThat(extractor.extractQuotes(security), is(true));
 
         assertThat(security.getPrices().size(), is(1));
+
+        SecurityPrice price = security.getPrices().get(0);
+        assertThat(price.getDate(), is(LocalDate.parse("2015-01-15"))); //$NON-NLS-1$
+        assertThat(price.getValue(), is(Values.Quote.factorize(10)));
+    }
+
+    @Test
+    public void testExtractionOfQuotesRemovesSecurityMultiplier()
+    {
+        security.setPropertyValue(SecurityProperty.Type.FEED, SecurityMultiplier.PROPERTY_NAME, "5"); //$NON-NLS-1$
+
+        // Simulates the transaction after its execution price has been corrected
+        // with the multiplier-aware transaction editor: 10 shares * quote 10 *
+        // multiplier 5 = gross amount 500.
+        entry.setMonetaryAmount(Money.of(CurrencyUnit.EUR, Values.Amount.factorize(500)));
+
+        QuoteFromTransactionExtractor extractor = new QuoteFromTransactionExtractor(client,
+                        new TestCurrencyConverter());
+
+        assertThat(extractor.extractQuotes(security), is(true));
 
         SecurityPrice price = security.getPrices().get(0);
         assertThat(price.getDate(), is(LocalDate.parse("2015-01-15"))); //$NON-NLS-1$
