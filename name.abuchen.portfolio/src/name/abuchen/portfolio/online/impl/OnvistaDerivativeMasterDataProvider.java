@@ -48,7 +48,7 @@ public class OnvistaDerivativeMasterDataProvider implements DerivativeMasterData
                     "(?:LONG|SHORT|CALL|PUT|ZERTIFIKAT|OPTIONSSCHEIN)[^|]{0,100}?\\sAUF\\s+(.{2,120}?)(?=\\s+(?:WKN|ISIN|Emittent|Geld|Brief|Basispreis|K\\.O\\.|Knock-Out|Hebel|Bezugsverh))",
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern UNDERLYING_LABEL = Pattern.compile(
-                    "Basiswert\\s*:?[\\s|]*([A-Za-z0-9ÄÖÜäöüß&.()' /+_-]{2,120}?)(?=\\s+(?:[A-Za-z][A-Za-z ._-]{0,30}\\s*·|Basispreis|K\\.O\\.|Knock-Out|Hebel|Bezugsverh|Rechtlich|WKN|ISIN|Emittent))",
+                    "Basiswert\\s*:?[\\s|]*([A-Za-z0-9ÄÖÜäöüß&.()' /+_-]{2,120})(?=\\s+(?:[A-Za-z][A-Za-z ._-]{0,30}\\s*·|Basispreis|K\\.O\\.|Knock-Out|Hebel|Bezugsverh|Rechtlich|WKN|ISIN|Emittent))",
                     Pattern.CASE_INSENSITIVE);
     private static final DateTimeFormatter GERMAN_DATE = DateTimeFormatter.ofPattern("dd.MM.uuuu", Locale.GERMANY);
 
