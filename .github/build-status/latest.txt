@@ -1,6 +1,6 @@
-run_id=34969604099
-run_number=102
-job_status=failure
-source_sha=1416a454efbd4e764164433ddf35d054670709ea
+run_id=34989570868
+run_number=103
+job_status=success
+source_sha=eaf7221aa9824151abf339e2d302079125b9d383
 source_ref=agent/ko-onvista-integration
 event=push
