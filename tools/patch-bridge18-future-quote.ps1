@@ -46,5 +46,42 @@ $helper = @'
 if (-not $text.Contains($marker)) { throw 'marketValue marker not found' }
 $text = $text.Replace($marker, $helper)
 
+$oldFutureValue = @'
+                if (record != null)
+                {
+                    Money currentContractValue = element.getValuation().multiplyAndRound(
+                                    SecurityMultiplier.valueAt(element.getSecurity(), model.getDate()).doubleValue());
+                    return currentContractValue.subtract(record.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED));
+                }
+'@
+$newFutureValue = @'
+                if (record != null)
+                {
+                    // For futures the internally stored valuation already contains the
+                    // contract multiplier. The Statement of Assets market value must be
+                    // the unrealized P&L as of the statement date, not the notional.
+                    Money currentContractValue = element.getValuation();
+                    return currentContractValue.subtract(record.getCost(CostMethod.FIFO, TaxesAndFees.INCLUDED));
+                }
+'@
+if (-not $text.Contains($oldFutureValue)) { throw 'Future market value block not found' }
+$text = $text.Replace($oldFutureValue, $newFutureValue)
+
 Set-Content -Path $path -Value $text -Encoding UTF8
-Write-Host 'Patched StatementOfAssetsViewer future quote display to remove contract multiplier.'
+Write-Host 'Patched StatementOfAssetsViewer future quote display and futures unrealized PnL market value.'
+
+$transactionsPath = 'name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/TransactionsViewer.java'
+$transactions = Get-Content $transactionsPath -Raw
+$oldMultiplierColumn = @'
+        column = new Column("multiplier", "Multiplier", SWT.RIGHT, 80); //$NON-NLS-1$ //$NON-NLS-2$
+'@
+$newMultiplierColumn = @'
+        // Use a new stable column id so existing saved table layouts cannot hide
+        // the restored multiplier column from earlier accepted builds.
+        column = new Column("multiplier_v2", "Multiplier", SWT.RIGHT, 80); //$NON-NLS-1$ //$NON-NLS-2$
+        column.setVisible(true);
+'@
+if (-not $transactions.Contains($oldMultiplierColumn)) { throw 'Multiplier column block not found' }
+$transactions = $transactions.Replace($oldMultiplierColumn, $newMultiplierColumn)
+Set-Content -Path $transactionsPath -Value $transactions -Encoding UTF8
+Write-Host 'Restored visible date-dependent Multiplier column in transaction overview.'
