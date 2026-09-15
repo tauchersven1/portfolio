@@ -13,6 +13,7 @@ on:
       - 'name.abuchen.portfolio.ui.tests/**'
       - 'portfolio-app/**'
       - 'portfolio-product/**'
+      - 'tools/patch-bridge18-future-quote.ps1'
       - '.github/workflows/derivatives-bridge-windows.yml'
   workflow_dispatch:
 
@@ -49,6 +50,13 @@ jobs:
         uses: stCarolas/setup-maven@v5
         with:
           maven-version: 3.9.16
+
+      - name: Patch future quote display in Statement of Assets
+        shell: pwsh
+        run: |
+          ./tools/patch-bridge18-future-quote.ps1
+          $patched = Get-Content 'name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/views/StatementOfAssetsViewer.java' -Raw
+          if ($patched -notmatch 'displayedQuoteValue') { throw 'Future quote display patch was not applied' }
 
       - name: Build Portfolio Performance bridge
         shell: pwsh
