@@ -16,6 +16,10 @@ on:
       - '.github/workflows/derivatives-bridge-windows.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   build:
     name: Build Windows x86_64 PP Bridge
@@ -64,10 +68,67 @@ jobs:
             throw 'Bundled runtime does not contain jre/bin/javaw.exe'
           }
 
-      - name: Upload Windows PP bridge test build
+      - name: Inject accepted Add-on Build 77 and register bundle
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $product = 'portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio'
+          $download = Join-Path $env:RUNNER_TEMP 'addon77-artifact'
+          $site = Join-Path $env:RUNNER_TEMP 'addon77-site'
+          New-Item -ItemType Directory -Force -Path $download | Out-Null
+          New-Item -ItemType Directory -Force -Path $site | Out-Null
+
+          gh run download 34569179813 --repo $env:GITHUB_REPOSITORY --name 'PortfolioPerformance-Derivatives-Addon-UpdateSite' --dir $download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $outer = Get-ChildItem -Path $download -Filter '*.zip' -File | Select-Object -First 1
+          if (-not $outer) { throw 'Accepted Add-on 77 update-site ZIP not found in downloaded artifact' }
+          Expand-Archive -Path $outer.FullName -DestinationPath $site -Force
+
+          $addonJar = Get-ChildItem -Path $site -Recurse -Filter 'de.venari.portfolio.derivatives_0.1.0.202609110622.jar' -File | Select-Object -First 1
+          if (-not $addonJar) { throw 'Accepted Add-on 77 JAR not found' }
+
+          $targetJar = Join-Path $product 'plugins/de.venari.portfolio.derivatives_0.1.0.202609110622.jar'
+          Copy-Item -Path $addonJar.FullName -Destination $targetJar -Force
+
+          $bundlesInfo = Join-Path $product 'configuration/org.eclipse.equinox.simpleconfigurator/bundles.info'
+          $bundleLine = 'de.venari.portfolio.derivatives,0.1.0.202609110622,plugins/de.venari.portfolio.derivatives_0.1.0.202609110622.jar,4,true'
+          $lines = Get-Content $bundlesInfo
+          if (-not ($lines -contains $bundleLine)) {
+            Add-Content -Path $bundlesInfo -Value $bundleLine
+          }
+
+          if (-not (Test-Path $targetJar)) { throw 'Integrated add-on JAR is missing from plugins folder' }
+          if (-not ((Get-Content $bundlesInfo) -contains $bundleLine)) { throw 'Integrated add-on is not registered in bundles.info' }
+
+          $manifest = & jar xf $targetJar META-INF/MANIFEST.MF
+          if (-not (Test-Path 'META-INF/MANIFEST.MF')) { throw 'Could not inspect integrated add-on manifest' }
+          $manifestText = Get-Content 'META-INF/MANIFEST.MF' -Raw
+          Remove-Item -Recurse -Force 'META-INF'
+          if ($manifestText -notmatch 'Bundle-SymbolicName: de.venari.portfolio.derivatives') { throw 'Wrong add-on bundle injected' }
+
+          Write-Host 'Accepted Add-on Build 77 integrated and registered via simpleconfigurator.'
+
+      - name: Verify Bridge 18 integration points
+        shell: pwsh
+        run: |
+          $product = 'portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio'
+          $uiJar = Get-ChildItem -Path (Join-Path $product 'plugins') -Filter 'name.abuchen.portfolio.ui_*.jar' | Select-Object -First 1
+          if (-not $uiJar) { throw 'Portfolio UI bundle not found' }
+          $entries = & jar tf $uiJar.FullName
+          foreach ($required in @(
+            'name/abuchen/portfolio/ui/NavigationExtension.class',
+            'name/abuchen/portfolio/ui/AddonSecurityPage.class',
+            'name/abuchen/portfolio/ui/AddonView.class')) {
+            if ($entries -notcontains $required) { throw "Missing Bridge extension class: $required" }
+          }
+          Write-Host 'Bridge extension API verified.'
+
+      - name: Upload integrated Bridge 18 plus accepted Add-on 77
         uses: actions/upload-artifact@v6
         with:
-          name: PortfolioPerformance-Bridge-Windows-x86_64
+          name: PortfolioPerformance-Bridge18-Addon77-Windows-x86_64
           path: portfolio-product/target/products/name.abuchen.portfolio.product/win32/win32/x86_64/portfolio/
           if-no-files-found: error
           retention-days: 14
