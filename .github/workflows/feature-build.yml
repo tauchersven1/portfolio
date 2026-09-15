@@ -9,6 +9,7 @@ on:
       - agent/derivatives-official-release
       - agent/exposure-total-trading-symbol
       - agent/total-bar-default-show
+      - agent/ko-onvista-integration
     paths-ignore:
       - '.github/build-status/**'
 
