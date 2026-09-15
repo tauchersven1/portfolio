@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.online.DerivativeMasterDataProvider.Result;
+import name.abuchen.portfolio.online.impl.OnvistaDerivativeMasterDataProvider;
 import name.abuchen.portfolio.online.impl.VontobelDerivativeMasterDataProvider;
 
 /**
@@ -14,7 +15,7 @@ import name.abuchen.portfolio.online.impl.VontobelDerivativeMasterDataProvider;
 public final class DerivativeMasterDataLookup
 {
     private static final List<DerivativeMasterDataProvider> PROVIDERS = List.of(
-                    new VontobelDerivativeMasterDataProvider());
+                    new OnvistaDerivativeMasterDataProvider(), new VontobelDerivativeMasterDataProvider());
 
     private DerivativeMasterDataLookup()
     {
