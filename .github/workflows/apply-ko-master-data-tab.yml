@@ -1,0 +1,118 @@
+name: Apply K.O. master-data subtab
+
+on:
+  push:
+    branches:
+      - agent/ko-onvista-integration
+    paths:
+      - '.github/workflows/apply-ko-master-data-tab.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Move K.O. master data into its own subtab
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/wizards/security/SecurityMultiplierPage.java')
+          text = path.read_text(encoding='utf-8')
+
+          old_tabs = '''        Composite futureTab = new Composite(derivativeDetailsTabs, SWT.NONE);
+          GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).applyTo(futureTab);
+          TabItem futureTabItem = new TabItem(derivativeDetailsTabs, SWT.NONE);
+          futureTabItem.setText("Future");
+          futureTabItem.setControl(futureTab);
+
+          optionGroup = new Group(optionTab, SWT.NONE);'''
+          new_tabs = '''        Composite futureTab = new Composite(derivativeDetailsTabs, SWT.NONE);
+          GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).applyTo(futureTab);
+          TabItem futureTabItem = new TabItem(derivativeDetailsTabs, SWT.NONE);
+          futureTabItem.setText("Future");
+          futureTabItem.setControl(futureTab);
+
+          Composite knockoutTab = new Composite(derivativeDetailsTabs, SWT.NONE);
+          GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).applyTo(knockoutTab);
+          TabItem knockoutTabItem = new TabItem(derivativeDetailsTabs, SWT.NONE);
+          knockoutTabItem.setText("K.O.-Stammdaten");
+          knockoutTabItem.setControl(knockoutTab);
+
+          optionGroup = new Group(optionTab, SWT.NONE);'''
+
+          old_ko = '''        createAlignedLabel(optionGroup, "Issuer");
+          issuer = new Text(optionGroup, SWT.BORDER);
+          GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuer);
+          new Label(optionGroup, SWT.NONE);
+          new Label(optionGroup, SWT.NONE);
+
+          createAlignedLabel(optionGroup, "Issuer product ID");
+          issuerProductId = new Text(optionGroup, SWT.BORDER);
+          GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuerProductId);
+          new Label(optionGroup, SWT.NONE);
+          new Label(optionGroup, SWT.NONE);
+
+          createAlignedLabel(optionGroup, "Subscription ratio");
+          subscriptionRatio = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
+          subscriptionRatio.setToolTipText("Underlying units represented by one option/certificate.");
+          GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(subscriptionRatio);
+          new Label(optionGroup, SWT.NONE);
+          new Label(optionGroup, SWT.NONE);
+
+          knockoutDetailsGroup = new Group(optionGroup, SWT.NONE);
+          knockoutDetailsGroup.setText("K.O. certificate details");
+          GridLayoutFactory.fillDefaults().numColumns(4).margins(0, 8).spacing(8, 6).applyTo(knockoutDetailsGroup);
+          GridDataFactory.fillDefaults().grab(true, false).span(4, 1).applyTo(knockoutDetailsGroup);
+
+          initialKnockoutLevelLabel = createAlignedLabel(knockoutDetailsGroup, "Initial K.O. level");'''
+          new_ko = '''        knockoutDetailsGroup = new Group(knockoutTab, SWT.NONE);
+          knockoutDetailsGroup.setText("K.O. certificate details");
+          GridLayoutFactory.fillDefaults().numColumns(4).margins(8, 8).spacing(8, 6).applyTo(knockoutDetailsGroup);
+          GridDataFactory.fillDefaults().grab(true, false).applyTo(knockoutDetailsGroup);
+
+          createAlignedLabel(knockoutDetailsGroup, "Issuer");
+          issuer = new Text(knockoutDetailsGroup, SWT.BORDER);
+          GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuer);
+          new Label(knockoutDetailsGroup, SWT.NONE);
+          new Label(knockoutDetailsGroup, SWT.NONE);
+
+          createAlignedLabel(knockoutDetailsGroup, "Issuer product ID");
+          issuerProductId = new Text(knockoutDetailsGroup, SWT.BORDER);
+          GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuerProductId);
+          new Label(knockoutDetailsGroup, SWT.NONE);
+          new Label(knockoutDetailsGroup, SWT.NONE);
+
+          createAlignedLabel(knockoutDetailsGroup, "Subscription ratio");
+          subscriptionRatio = new Text(knockoutDetailsGroup, SWT.BORDER | SWT.RIGHT);
+          subscriptionRatio.setToolTipText("Underlying units represented by one option/certificate.");
+          GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(subscriptionRatio);
+          new Label(knockoutDetailsGroup, SWT.NONE);
+          new Label(knockoutDetailsGroup, SWT.NONE);
+
+          initialKnockoutLevelLabel = createAlignedLabel(knockoutDetailsGroup, "Initial K.O. level");'''
+
+          if text.count(old_tabs) != 1:
+              raise SystemExit(f'Expected one derivative tab insertion point, found {text.count(old_tabs)}')
+          if text.count(old_ko) != 1:
+              raise SystemExit(f'Expected one K.O. master-data block, found {text.count(old_ko)}')
+
+          text = text.replace(old_tabs, new_tabs).replace(old_ko, new_ko)
+          path.write_text(text, encoding='utf-8')
+
+      - name: Commit source change and remove helper workflow
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm '.github/workflows/apply-ko-master-data-tab.yml'
+          git add 'name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/wizards/security/SecurityMultiplierPage.java'
+          git diff --cached --check
+          git commit -m 'Move K.O. master data into dedicated subtab'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
