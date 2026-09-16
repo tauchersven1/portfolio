@@ -24,87 +24,66 @@ jobs:
           from pathlib import Path
 
           path = Path('name.abuchen.portfolio.ui/src/name/abuchen/portfolio/ui/wizards/security/SecurityMultiplierPage.java')
-          text = path.read_text(encoding='utf-8')
+          lines = path.read_text(encoding='utf-8').splitlines()
 
-          old_tabs = '''        Composite futureTab = new Composite(derivativeDetailsTabs, SWT.NONE);
-          GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).applyTo(futureTab);
-          TabItem futureTabItem = new TabItem(derivativeDetailsTabs, SWT.NONE);
-          futureTabItem.setText("Future");
-          futureTabItem.setControl(futureTab);
+          option_anchor = 'optionGroup = new Group(optionTab, SWT.NONE);'
+          option_matches = [i for i, line in enumerate(lines) if line.strip() == option_anchor]
+          if len(option_matches) != 1:
+              raise SystemExit(f'Expected one option group anchor, found {len(option_matches)}')
+          option_index = option_matches[0]
+          indent = lines[option_index][:-len(lines[option_index].lstrip())]
 
-          optionGroup = new Group(optionTab, SWT.NONE);'''
-          new_tabs = '''        Composite futureTab = new Composite(derivativeDetailsTabs, SWT.NONE);
-          GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).applyTo(futureTab);
-          TabItem futureTabItem = new TabItem(derivativeDetailsTabs, SWT.NONE);
-          futureTabItem.setText("Future");
-          futureTabItem.setControl(futureTab);
+          tab_lines = [
+              indent + 'Composite knockoutTab = new Composite(derivativeDetailsTabs, SWT.NONE);',
+              indent + 'GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).applyTo(knockoutTab);',
+              indent + 'TabItem knockoutTabItem = new TabItem(derivativeDetailsTabs, SWT.NONE);',
+              indent + 'knockoutTabItem.setText("K.O.-Stammdaten");',
+              indent + 'knockoutTabItem.setControl(knockoutTab);',
+              ''
+          ]
+          lines[option_index:option_index] = tab_lines
 
-          Composite knockoutTab = new Composite(derivativeDetailsTabs, SWT.NONE);
-          GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).applyTo(knockoutTab);
-          TabItem knockoutTabItem = new TabItem(derivativeDetailsTabs, SWT.NONE);
-          knockoutTabItem.setText("K.O.-Stammdaten");
-          knockoutTabItem.setControl(knockoutTab);
+          ko_start_anchor = 'createAlignedLabel(optionGroup, "Issuer");'
+          ko_end_anchor = 'initialKnockoutLevelLabel = createAlignedLabel(knockoutDetailsGroup, "Initial K.O. level");'
+          start_matches = [i for i, line in enumerate(lines) if line.strip() == ko_start_anchor]
+          if len(start_matches) != 1:
+              raise SystemExit(f'Expected one K.O. block start, found {len(start_matches)}')
+          ko_start = start_matches[0]
+          end_matches = [i for i in range(ko_start, len(lines)) if lines[i].strip() == ko_end_anchor]
+          if len(end_matches) != 1:
+              raise SystemExit(f'Expected one K.O. block end, found {len(end_matches)}')
+          ko_end = end_matches[0]
+          k = lines[ko_start][:-len(lines[ko_start].lstrip())]
 
-          optionGroup = new Group(optionTab, SWT.NONE);'''
-
-          old_ko = '''        createAlignedLabel(optionGroup, "Issuer");
-          issuer = new Text(optionGroup, SWT.BORDER);
-          GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuer);
-          new Label(optionGroup, SWT.NONE);
-          new Label(optionGroup, SWT.NONE);
-
-          createAlignedLabel(optionGroup, "Issuer product ID");
-          issuerProductId = new Text(optionGroup, SWT.BORDER);
-          GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuerProductId);
-          new Label(optionGroup, SWT.NONE);
-          new Label(optionGroup, SWT.NONE);
-
-          createAlignedLabel(optionGroup, "Subscription ratio");
-          subscriptionRatio = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
-          subscriptionRatio.setToolTipText("Underlying units represented by one option/certificate.");
-          GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(subscriptionRatio);
-          new Label(optionGroup, SWT.NONE);
-          new Label(optionGroup, SWT.NONE);
-
-          knockoutDetailsGroup = new Group(optionGroup, SWT.NONE);
-          knockoutDetailsGroup.setText("K.O. certificate details");
-          GridLayoutFactory.fillDefaults().numColumns(4).margins(0, 8).spacing(8, 6).applyTo(knockoutDetailsGroup);
-          GridDataFactory.fillDefaults().grab(true, false).span(4, 1).applyTo(knockoutDetailsGroup);
-
-          initialKnockoutLevelLabel = createAlignedLabel(knockoutDetailsGroup, "Initial K.O. level");'''
-          new_ko = '''        knockoutDetailsGroup = new Group(knockoutTab, SWT.NONE);
-          knockoutDetailsGroup.setText("K.O. certificate details");
-          GridLayoutFactory.fillDefaults().numColumns(4).margins(8, 8).spacing(8, 6).applyTo(knockoutDetailsGroup);
-          GridDataFactory.fillDefaults().grab(true, false).applyTo(knockoutDetailsGroup);
-
-          createAlignedLabel(knockoutDetailsGroup, "Issuer");
-          issuer = new Text(knockoutDetailsGroup, SWT.BORDER);
-          GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuer);
-          new Label(knockoutDetailsGroup, SWT.NONE);
-          new Label(knockoutDetailsGroup, SWT.NONE);
-
-          createAlignedLabel(knockoutDetailsGroup, "Issuer product ID");
-          issuerProductId = new Text(knockoutDetailsGroup, SWT.BORDER);
-          GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuerProductId);
-          new Label(knockoutDetailsGroup, SWT.NONE);
-          new Label(knockoutDetailsGroup, SWT.NONE);
-
-          createAlignedLabel(knockoutDetailsGroup, "Subscription ratio");
-          subscriptionRatio = new Text(knockoutDetailsGroup, SWT.BORDER | SWT.RIGHT);
-          subscriptionRatio.setToolTipText("Underlying units represented by one option/certificate.");
-          GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(subscriptionRatio);
-          new Label(knockoutDetailsGroup, SWT.NONE);
-          new Label(knockoutDetailsGroup, SWT.NONE);
-
-          initialKnockoutLevelLabel = createAlignedLabel(knockoutDetailsGroup, "Initial K.O. level");'''
-
-          if text.count(old_tabs) != 1:
-              raise SystemExit(f'Expected one derivative tab insertion point, found {text.count(old_tabs)}')
-          if text.count(old_ko) != 1:
-              raise SystemExit(f'Expected one K.O. master-data block, found {text.count(old_ko)}')
-
-          text = text.replace(old_tabs, new_tabs).replace(old_ko, new_ko)
-          path.write_text(text, encoding='utf-8')
+          ko_lines = [
+              k + 'knockoutDetailsGroup = new Group(knockoutTab, SWT.NONE);',
+              k + 'knockoutDetailsGroup.setText("K.O. certificate details");',
+              k + 'GridLayoutFactory.fillDefaults().numColumns(4).margins(8, 8).spacing(8, 6).applyTo(knockoutDetailsGroup);',
+              k + 'GridDataFactory.fillDefaults().grab(true, false).applyTo(knockoutDetailsGroup);',
+              '',
+              k + 'createAlignedLabel(knockoutDetailsGroup, "Issuer");',
+              k + 'issuer = new Text(knockoutDetailsGroup, SWT.BORDER);',
+              k + 'GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuer);',
+              k + 'new Label(knockoutDetailsGroup, SWT.NONE);',
+              k + 'new Label(knockoutDetailsGroup, SWT.NONE);',
+              '',
+              k + 'createAlignedLabel(knockoutDetailsGroup, "Issuer product ID");',
+              k + 'issuerProductId = new Text(knockoutDetailsGroup, SWT.BORDER);',
+              k + 'GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuerProductId);',
+              k + 'new Label(knockoutDetailsGroup, SWT.NONE);',
+              k + 'new Label(knockoutDetailsGroup, SWT.NONE);',
+              '',
+              k + 'createAlignedLabel(knockoutDetailsGroup, "Subscription ratio");',
+              k + 'subscriptionRatio = new Text(knockoutDetailsGroup, SWT.BORDER | SWT.RIGHT);',
+              k + 'subscriptionRatio.setToolTipText("Underlying units represented by one option/certificate.");',
+              k + 'GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(subscriptionRatio);',
+              k + 'new Label(knockoutDetailsGroup, SWT.NONE);',
+              k + 'new Label(knockoutDetailsGroup, SWT.NONE);',
+              '',
+              k + 'initialKnockoutLevelLabel = createAlignedLabel(knockoutDetailsGroup, "Initial K.O. level");'
+          ]
+          lines[ko_start:ko_end + 1] = ko_lines
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
       - name: Commit source change and remove helper workflow
         shell: bash
