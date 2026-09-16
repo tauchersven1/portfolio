@@ -7,6 +7,7 @@ on:
       - agent/derivatives-tab
       - agent/derivatives-integrated
       - agent/derivatives-official-release
+      - agent/bridge19-0.87.0
       - agent/exposure-total-trading-symbol
       - agent/total-bar-default-show
     paths-ignore:
