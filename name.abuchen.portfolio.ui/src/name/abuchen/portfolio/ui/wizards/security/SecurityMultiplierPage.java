@@ -284,6 +284,12 @@ public class SecurityMultiplierPage extends AbstractPage
         futureTabItem.setText("Future");
         futureTabItem.setControl(futureTab);
 
+        Composite knockoutTab = new Composite(derivativeDetailsTabs, SWT.NONE);
+        GridLayoutFactory.fillDefaults().numColumns(1).margins(8, 8).applyTo(knockoutTab);
+        TabItem knockoutTabItem = new TabItem(derivativeDetailsTabs, SWT.NONE);
+        knockoutTabItem.setText("K.O.-Stammdaten");
+        knockoutTabItem.setControl(knockoutTab);
+
         optionGroup = new Group(optionTab, SWT.NONE);
         optionGroup.setText("Option");
         GridLayoutFactory.fillDefaults().numColumns(4).margins(8, 8).spacing(8, 6).applyTo(optionGroup);
@@ -331,29 +337,29 @@ public class SecurityMultiplierPage extends AbstractPage
         new Label(optionGroup, SWT.NONE);
         new Label(optionGroup, SWT.NONE);
 
-        createAlignedLabel(optionGroup, "Issuer");
-        issuer = new Text(optionGroup, SWT.BORDER);
-        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuer);
-        new Label(optionGroup, SWT.NONE);
-        new Label(optionGroup, SWT.NONE);
-
-        createAlignedLabel(optionGroup, "Issuer product ID");
-        issuerProductId = new Text(optionGroup, SWT.BORDER);
-        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuerProductId);
-        new Label(optionGroup, SWT.NONE);
-        new Label(optionGroup, SWT.NONE);
-
-        createAlignedLabel(optionGroup, "Subscription ratio");
-        subscriptionRatio = new Text(optionGroup, SWT.BORDER | SWT.RIGHT);
-        subscriptionRatio.setToolTipText("Underlying units represented by one option/certificate.");
-        GridDataFactory.fillDefaults().hint(OPTION_FIELD_WIDTH, SWT.DEFAULT).applyTo(subscriptionRatio);
-        new Label(optionGroup, SWT.NONE);
-        new Label(optionGroup, SWT.NONE);
-
-        knockoutDetailsGroup = new Group(optionGroup, SWT.NONE);
+        knockoutDetailsGroup = new Group(knockoutTab, SWT.NONE);
         knockoutDetailsGroup.setText("K.O. certificate details");
-        GridLayoutFactory.fillDefaults().numColumns(4).margins(0, 8).spacing(8, 6).applyTo(knockoutDetailsGroup);
-        GridDataFactory.fillDefaults().grab(true, false).span(4, 1).applyTo(knockoutDetailsGroup);
+        GridLayoutFactory.fillDefaults().numColumns(4).margins(8, 8).spacing(8, 6).applyTo(knockoutDetailsGroup);
+        GridDataFactory.fillDefaults().grab(true, false).applyTo(knockoutDetailsGroup);
+
+        createAlignedLabel(knockoutDetailsGroup, "Issuer");
+        issuer = new Text(knockoutDetailsGroup, SWT.BORDER);
+        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuer);
+        new Label(knockoutDetailsGroup, SWT.NONE);
+        new Label(knockoutDetailsGroup, SWT.NONE);
+
+        createAlignedLabel(knockoutDetailsGroup, "Issuer product ID");
+        issuerProductId = new Text(knockoutDetailsGroup, SWT.BORDER);
+        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(issuerProductId);
+        new Label(knockoutDetailsGroup, SWT.NONE);
+        new Label(knockoutDetailsGroup, SWT.NONE);
+
+        createAlignedLabel(knockoutDetailsGroup, "Subscription ratio");
+        subscriptionRatio = new Text(knockoutDetailsGroup, SWT.BORDER | SWT.RIGHT);
+        subscriptionRatio.setToolTipText("Underlying units represented by one option/certificate.");
+        GridDataFactory.fillDefaults().hint(KO_DETAIL_FIELD_WIDTH, SWT.DEFAULT).applyTo(subscriptionRatio);
+        new Label(knockoutDetailsGroup, SWT.NONE);
+        new Label(knockoutDetailsGroup, SWT.NONE);
 
         initialKnockoutLevelLabel = createAlignedLabel(knockoutDetailsGroup, "Initial K.O. level");
         initialKnockoutLevel = new Text(knockoutDetailsGroup, SWT.BORDER | SWT.RIGHT);
