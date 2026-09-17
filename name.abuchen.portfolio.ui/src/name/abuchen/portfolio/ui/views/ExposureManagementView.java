@@ -48,6 +48,8 @@ import name.abuchen.portfolio.snapshot.DerivativePositionCalculator;
 import name.abuchen.portfolio.snapshot.ExposureCalculator;
 import name.abuchen.portfolio.snapshot.ExposureCalculator.ExposureType;
 import name.abuchen.portfolio.snapshot.SecurityPosition;
+import name.abuchen.portfolio.snapshot.TradingSymbolExposureGroup;
+import name.abuchen.portfolio.snapshot.TradingSymbolExposureGroup.Group;
 import name.abuchen.portfolio.ui.UIConstants;
 import name.abuchen.portfolio.ui.editor.AbstractFinanceView;
 import name.abuchen.portfolio.ui.util.ClientFilterDropDown;
@@ -441,25 +443,31 @@ public class ExposureManagementView extends AbstractFinanceView
             return;
         }
 
-        Map<String, Map<String, Long>> values = new LinkedHashMap<>();
+        Map<ChartBucket, Map<String, Long>> values = new LinkedHashMap<>();
         if (totalBar != null && totalBar.getSelectionIndex() == 1)
         {
             Map<String, Long> total = new LinkedHashMap<>();
             filtered.forEach(row -> total.merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
-            values.put(TOTAL, total);
+            values.put(new ChartBucket(TOTAL, TOTAL), total);
         }
 
         if (byTradingSymbol)
         {
-            filtered.stream().sorted(Comparator.comparing(r -> tradingSymbolLabel(r.security()), String.CASE_INSENSITIVE_ORDER))
-                            .forEach(row -> values.computeIfAbsent(tradingSymbolLabel(row.security()),
-                                            k -> new LinkedHashMap<>())
-                                            .merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
+            filtered.stream()
+                            .sorted(Comparator.comparing(r -> tradingSymbolGroup(r.security()).label(),
+                                            String.CASE_INSENSITIVE_ORDER))
+                            .forEach(row -> {
+                                Group group = tradingSymbolGroup(row.security());
+                                values.computeIfAbsent(new ChartBucket(group.identity(), group.label()),
+                                                key -> new LinkedHashMap<>())
+                                                .merge(groupLabel(row), row.exposure().getAmount(), Long::sum);
+                            });
         }
         else
         {
             filtered.stream().sorted(Comparator.comparing(this::maturitySortKey)).forEach(row -> values
-                            .computeIfAbsent(row.maturity(), k -> new LinkedHashMap<>())
+                            .computeIfAbsent(new ChartBucket("maturity:" + row.maturity(), row.maturity()),
+                                            k -> new LinkedHashMap<>())
                             .merge(groupLabel(row), row.exposure().getAmount(), Long::sum));
         }
 
@@ -513,7 +521,7 @@ public class ExposureManagementView extends AbstractFinanceView
         double step = plotWidth / (double) count;
         int barWidth = Math.max(8, (int) Math.min(60, step * 0.62));
         int bucketIndex = 0;
-        for (Map.Entry<String, Map<String, Long>> bucket : values.entrySet())
+        for (Map.Entry<ChartBucket, Map<String, Long>> bucket : values.entrySet())
         {
             int centerX = left + (int) Math.round((bucketIndex + 0.5) * step);
             int x = centerX - barWidth / 2;
@@ -541,7 +549,7 @@ public class ExposureManagementView extends AbstractFinanceView
             }
 
             gc.setForeground(Colors.theme().defaultForeground());
-            String label = bucket.getKey();
+            String label = bucket.getKey().label();
             int labelY = top + plotHeight + 8;
             if (byTradingSymbol)
             {
@@ -581,11 +589,14 @@ public class ExposureManagementView extends AbstractFinanceView
     {
         if (security == null)
             return CASH;
-        String contractSymbol = property(security, "contractSymbol");
-        if (contractSymbol != null && !contractSymbol.isBlank())
-            return contractSymbol;
-        String ticker = security.getTickerSymbol();
-        return ticker == null || ticker.isBlank() ? "No trading symbol" : ticker;
+        return tradingSymbolGroup(security).label();
+    }
+
+    private Group tradingSymbolGroup(Security security)
+    {
+        if (security == null)
+            return new Group("cash", CASH);
+        return TradingSymbolExposureGroup.resolve(getClient(), security);
     }
 
     private Security linkedUnderlying(Security derivative)
@@ -683,6 +694,10 @@ public class ExposureManagementView extends AbstractFinanceView
 
     private record ExposureRow(Security security, SecurityPosition position, Money exposure, String maturity,
                     LocalDate maturityDate, String instrumentType, String putCall, String underlying)
+    {
+    }
+
+    private record ChartBucket(String identity, String label)
     {
     }
 }
