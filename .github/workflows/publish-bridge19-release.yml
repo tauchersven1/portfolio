@@ -1,0 +1,64 @@
+name: Publish Bridge 19 Release
+
+on:
+  push:
+    branches:
+      - agent/bridge19-0.87.0
+    paths:
+      - '.github/workflows/publish-bridge19-release.yml'
+      - 'docs/derivatives/**'
+      - 'examples/Derivatives_AddIn_Demo.xml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      TAG: derivatives-poc-bridge19-build111
+      BUILD_RUN_ID: '35206476942'
+      BUILD_ARTIFACT: PortfolioPerformance-Windows-x86_64-111
+      RELEASE_ZIP: PortfolioPerformance-Bridge19-Windows-x86_64-Build111.zip
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download verified Build 111 artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force -Path 'dist/portfolio' | Out-Null
+          gh run download $env:BUILD_RUN_ID --repo '${{ github.repository }}' --name $env:BUILD_ARTIFACT --dir 'dist/portfolio'
+          if (-not (Test-Path 'dist/portfolio/PortfolioPerformance.exe')) {
+            throw 'Build artifact does not contain PortfolioPerformance.exe'
+          }
+
+      - name: Create release files
+        shell: pwsh
+        run: |
+          Compress-Archive -Path 'dist/portfolio/*' -DestinationPath "dist/$env:RELEASE_ZIP" -CompressionLevel Optimal
+          Copy-Item 'examples/Derivatives_AddIn_Demo.xml' 'dist/Derivatives_AddIn_Demo.xml'
+          $hash = (Get-FileHash "dist/$env:RELEASE_ZIP" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $env:RELEASE_ZIP" | Set-Content 'dist/SHA256SUMS.txt' -Encoding ascii
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view $env:TAG --repo '${{ github.repository }}' *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $env:TAG already exists; refusing to overwrite it"
+          }
+          gh release create $env:TAG `
+            --repo '${{ github.repository }}' `
+            --target '${{ github.sha }}' `
+            --title 'Derivatives & Exposure Management PoC – Bridge 19 / Build 111' `
+            --notes-file 'docs/derivatives/RELEASE_NOTES_BUILD111.md' `
+            'dist/PortfolioPerformance-Bridge19-Windows-x86_64-Build111.zip' `
+            'dist/Derivatives_AddIn_Demo.xml' `
+            'dist/SHA256SUMS.txt'
+

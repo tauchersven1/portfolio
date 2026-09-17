@@ -19,16 +19,19 @@ The proof of concept currently includes, among other things:
 
 The implementation is intended as a **technical reference and discussion basis**, not as a finished upstream pull request. Data model, UI and calculation details may be adapted to the architecture and conventions of the upstream Portfolio Performance project.
 
-### Reproducible reference build
+### Current reference build
 
-- **Reference build:** Feature Build #84
-- **Build status:** success
-- **Commit:** [`6dd92ff372feab24302442006e641a7acaf9a15e`](https://github.com/tauchersven1/portfolio/commit/6dd92ff372feab24302442006e641a7acaf9a15e)
-- **Stable snapshot branch:** [`poc/derivatives-build84`](https://github.com/tauchersven1/portfolio/tree/poc/derivatives-build84)
-- **Development branch:** [`agent/derivatives-official-release`](https://github.com/tauchersven1/portfolio/tree/agent/derivatives-official-release)
-- **Synthetic demo portfolio:** [`examples/Exposure_Derivatives_Demo_Build84.xml`](examples/Exposure_Derivatives_Demo_Build84.xml)
+- **Windows download:** [Bridge 19 / Build 111 release](https://github.com/tauchersven1/portfolio/releases/tag/derivatives-poc-bridge19-build111)
+- **Build status:** [Feature Build #111 – success](https://github.com/tauchersven1/portfolio/actions/runs/35206476942)
+- **Executable source commit:** [`ed48abef2259335ab4759138bdf6d6e2ff32e363`](https://github.com/tauchersven1/portfolio/commit/ed48abef2259335ab4759138bdf6d6e2ff32e363)
+- **Current branch:** [`agent/bridge19-0.87.0`](https://github.com/tauchersven1/portfolio/tree/agent/bridge19-0.87.0)
+- **Synthetic demo portfolio:** [`examples/Derivatives_AddIn_Demo.xml`](examples/Derivatives_AddIn_Demo.xml)
+- **Architecture:** [`docs/derivatives/ARCHITECTURE.md`](docs/derivatives/ARCHITECTURE.md)
+- **Testing guide:** [`docs/derivatives/TESTING.md`](docs/derivatives/TESTING.md)
 
-The derivatives work on the development branch is based on Portfolio Performance 0.87.0. The demo XML contains only demonstration data and no personal portfolio information. It includes representative stocks/underlyings, vanilla options and knock-out certificates for reproducing the derivative and exposure examples.
+The current work is based on Portfolio Performance 0.87.0. The demo XML contains only demonstration data and no personal portfolio information. In particular, it demonstrates that the `MSFT` stock and option `MSFT260918C00490000` are grouped together in **Exposure by Trading Symbol**.
+
+Bridge 19 / Build 111 is the complete integrated reference implementation. A separate branch, [`agent/derivatives-addon-standalone`](https://github.com/tauchersven1/portfolio/tree/agent/derivatives-addon-standalone), explores a smaller installable OSGi add-on and the core extension points it requires. See the architecture document for the exact distinction.
 
 ## Status
 
