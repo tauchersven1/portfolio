@@ -1,6 +1,6 @@
-run_id=35198428022
-run_number=109
-job_status=success
-source_sha=28fc3664efe6ccf0415f61f171626449d341ac1d
+run_id=35204429903
+run_number=110
+job_status=failure
+source_sha=13c1efc0e199f4609f3d18fc704893527b1541c5
 source_ref=agent/bridge19-0.87.0
 event=push
