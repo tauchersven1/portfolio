@@ -23,8 +23,8 @@ public class TradingSymbolExposureGroupTest
         option.setPropertyValue(SecurityProperty.Type.DERIVATIVE, "underlyingSecurityUUID", stock.getUUID());
         client.addSecurity(option);
 
-        TradingSymbolExposureGroup.Group stockGroup = TradingSymbolExposureGroup.resolve(client, stock);
-        TradingSymbolExposureGroup.Group optionGroup = TradingSymbolExposureGroup.resolve(client, option);
+        TradingSymbolExposureGroup.SymbolGroup stockGroup = TradingSymbolExposureGroup.resolve(client, stock);
+        TradingSymbolExposureGroup.SymbolGroup optionGroup = TradingSymbolExposureGroup.resolve(client, option);
 
         assertThat(optionGroup, is(stockGroup));
         assertThat(optionGroup.label(), is("MSFT"));
@@ -66,7 +66,7 @@ public class TradingSymbolExposureGroupTest
         Security option = option("MSFT260918C00490000");
         client.addSecurity(option);
 
-        TradingSymbolExposureGroup.Group group = TradingSymbolExposureGroup.resolve(client, option);
+        TradingSymbolExposureGroup.SymbolGroup group = TradingSymbolExposureGroup.resolve(client, option);
 
         assertThat(group.identity(), is("symbol:MSFT"));
         assertThat(group.label(), is("MSFT"));

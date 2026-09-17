@@ -13,7 +13,7 @@ public final class TradingSymbolExposureGroup
     private static final String CONTRACT_SYMBOL = "contractSymbol"; //$NON-NLS-1$
     private static final String NO_TRADING_SYMBOL = "No trading symbol"; //$NON-NLS-1$
 
-    public record Group(String identity, String label)
+    public record SymbolGroup(String identity, String label)
     {
     }
 
@@ -21,7 +21,7 @@ public final class TradingSymbolExposureGroup
     {
     }
 
-    public static Group resolve(Client client, Security security)
+    public static SymbolGroup resolve(Client client, Security security)
     {
         if (DerivativePositionCalculator.getDerivativeType(security) == null)
             return forSecurity(security);
@@ -36,16 +36,16 @@ public final class TradingSymbolExposureGroup
             return forSecurity(symbolUnderlying);
 
         if (symbol == null || symbol.isBlank())
-            return new Group("security:" + security.getUUID(), NO_TRADING_SYMBOL); //$NON-NLS-1$
+            return new SymbolGroup("security:" + security.getUUID(), NO_TRADING_SYMBOL); //$NON-NLS-1$
 
-        return new Group("symbol:" + symbol.toUpperCase(Locale.ROOT), symbol); //$NON-NLS-1$
+        return new SymbolGroup("symbol:" + symbol.toUpperCase(Locale.ROOT), symbol); //$NON-NLS-1$
     }
 
-    private static Group forSecurity(Security security)
+    private static SymbolGroup forSecurity(Security security)
     {
         String ticker = security.getTickerSymbol();
         String label = ticker == null || ticker.isBlank() ? NO_TRADING_SYMBOL : ticker.trim();
-        return new Group("security:" + security.getUUID(), label); //$NON-NLS-1$
+        return new SymbolGroup("security:" + security.getUUID(), label); //$NON-NLS-1$
     }
 
     private static String derivativeSymbol(Security security)

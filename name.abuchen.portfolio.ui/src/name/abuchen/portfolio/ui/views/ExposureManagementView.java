@@ -49,7 +49,7 @@ import name.abuchen.portfolio.snapshot.ExposureCalculator;
 import name.abuchen.portfolio.snapshot.ExposureCalculator.ExposureType;
 import name.abuchen.portfolio.snapshot.SecurityPosition;
 import name.abuchen.portfolio.snapshot.TradingSymbolExposureGroup;
-import name.abuchen.portfolio.snapshot.TradingSymbolExposureGroup.Group;
+import name.abuchen.portfolio.snapshot.TradingSymbolExposureGroup.SymbolGroup;
 import name.abuchen.portfolio.ui.UIConstants;
 import name.abuchen.portfolio.ui.editor.AbstractFinanceView;
 import name.abuchen.portfolio.ui.util.ClientFilterDropDown;
@@ -457,7 +457,7 @@ public class ExposureManagementView extends AbstractFinanceView
                             .sorted(Comparator.comparing(r -> tradingSymbolGroup(r.security()).label(),
                                             String.CASE_INSENSITIVE_ORDER))
                             .forEach(row -> {
-                                Group group = tradingSymbolGroup(row.security());
+                                SymbolGroup group = tradingSymbolGroup(row.security());
                                 values.computeIfAbsent(new ChartBucket(group.identity(), group.label()),
                                                 key -> new LinkedHashMap<>())
                                                 .merge(groupLabel(row), row.exposure().getAmount(), Long::sum);
@@ -592,10 +592,10 @@ public class ExposureManagementView extends AbstractFinanceView
         return tradingSymbolGroup(security).label();
     }
 
-    private Group tradingSymbolGroup(Security security)
+    private SymbolGroup tradingSymbolGroup(Security security)
     {
         if (security == null)
-            return new Group("cash", CASH);
+            return new SymbolGroup("cash", CASH);
         return TradingSymbolExposureGroup.resolve(getClient(), security);
     }
 
